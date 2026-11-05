@@ -464,7 +464,8 @@ function ioSheet(){
   return '<div class="hrow"><h2>Экспорт и импорт</h2><button class="x" data-close="1" aria-label="Закрыть"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></svg></button></div>'
   + '<span class="hint">«Выгрузить» — покажет все ваши записи текстом. Скопируйте и сохраните где угодно: это резервная копия. «Добавить записи» — вставьте сюда подготовленный текст и нажмите, записи добавятся к тем, что уже есть.</span>'
   + '<div class="field"><textarea id="io" class="txt" style="height:170px;padding:12px 16px;resize:none;line-height:1.4;font-size:13px" placeholder="Вставьте сюда текст для импорта"></textarea></div>'
-  + '<div class="btns"><button class="ghost" data-export="1">Выгрузить</button><button class="primary" data-import="1">Добавить записи</button></div>';
+  + '<div class="btns"><button class="ghost" data-export="1">Выгрузить</button><button class="primary" data-import="1">Добавить записи</button></div>'
+  + '<button class="ghost danger" data-clear="1" style="width:100%">'+((ui.draft && ui.draft.confirmClear) ? "Нажмите ещё раз — записи сотрутся" : "Удалить все записи")+'</button>';
 }
 
 function importRecords(text){
@@ -565,7 +566,7 @@ document.getElementById("fab").addEventListener("click", function(){
 });
 
 document.body.addEventListener("click", function(e){
-  var t = e.target.closest("[data-tab],[data-go],[data-cur],[data-rate],[data-day],[data-edit],[data-close],[data-scrim],[data-type],[data-src],[data-label],[data-cashin],[data-pending],[data-save],[data-update],[data-delete],[data-complete],[data-rate-save],[data-io],[data-export],[data-import]");
+  var t = e.target.closest("[data-tab],[data-go],[data-cur],[data-rate],[data-day],[data-edit],[data-close],[data-scrim],[data-type],[data-src],[data-label],[data-cashin],[data-pending],[data-save],[data-update],[data-delete],[data-complete],[data-rate-save],[data-io],[data-export],[data-import],[data-clear]");
   if(!t) return;
   var d = t.dataset;
 
@@ -582,6 +583,13 @@ document.body.addEventListener("click", function(e){
     ta.value = JSON.stringify(list(), null, 1);
     ta.focus(); ta.select();
     flash("скопируйте текст"); return;
+  }
+  if(d.clear!==undefined){
+    if(!ui.draft.confirmClear){ ui.draft.confirmClear = true; renderModal(); return; }
+    var ids = Object.keys(recs);
+    recs = {}; saveLocal();
+    if(DB) ids.forEach(function(id){ DB.collection("records").doc(id).delete().then(function(){},function(){}); });
+    ui.modal=null; render(); flash("стёрто записей: "+ids.length); return;
   }
   if(d.import!==undefined){
     var ta2 = document.getElementById("io");
