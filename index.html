@@ -328,7 +328,8 @@ function pageOverview(key){
   + '<button class="tile" data-go="3"><span class="lbl">Расходы</span><span class="v">'+money(exp)+'</span></button>'
   + '<button class="tile" data-go="0"><span class="lbl">Осталось</span><span class="v" style="color:'+(total-exp>=0?"var(--acc)":"#FF8A8A")+'">'+money(total-exp)+'</span></button>'
   + '</div>'
-  + (other.length ? '<span class="lbl" style="padding:6px 4px 0">ДРУГИЕ ДОХОДЫ</span><div class="list">'+other.map(function(r){ return itemHTML(r,"+"); }).join("")+'</div>' : "");
+  + (other.length ? '<span class="lbl" style="padding:6px 4px 0">ДРУГИЕ ДОХОДЫ</span><div class="list">'+other.map(function(r){ return itemHTML(r,"+"); }).join("")+'</div>' : "")
+  + '<button class="ghost" data-io="1" style="width:100%;margin-top:4px">Экспорт и импорт данных</button>';
 }
 function pageChat(key){
   var arr = inMonth(key,"chat");
@@ -459,6 +460,44 @@ function editSheet(){
   return h;
 }
 
+function ioSheet(){
+  return '<div class="hrow"><h2>Экспорт и импорт</h2><button class="x" data-close="1" aria-label="Закрыть"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></svg></button></div>'
+  + '<span class="hint">«Выгрузить» — покажет все ваши записи текстом. Скопируйте и сохраните где угодно: это резервная копия. «Добавить записи» — вставьте сюда подготовленный текст и нажмите, записи добавятся к тем, что уже есть.</span>'
+  + '<div class="field"><textarea id="io" class="txt" style="height:170px;padding:12px 16px;resize:none;line-height:1.4;font-size:13px" placeholder="Вставьте сюда текст для импорта"></textarea></div>'
+  + '<div class="btns"><button class="ghost" data-export="1">Выгрузить</button><button class="primary" data-import="1">Добавить записи</button></div>';
+}
+
+function importRecords(text){
+  var arr;
+  try{ arr = JSON.parse(text); }catch(e){ return "Текст не читается — вставьте его целиком, вместе со скобками"; }
+  if(!arr || typeof arr.length!=="number") return "Это не список записей";
+  var ok=0, bad=0;
+  arr.forEach(function(o){
+    if(!o || typeof o!=="object"){ bad++; return; }
+    var kinds = ["chat","vinted","other","expense","cash"];
+    if(kinds.indexOf(o.kind)<0){ bad++; return; }
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(String(o.date||""))){ bad++; return; }
+    var a = Number(o.amount);
+    if(!isFinite(a) || a===0){ bad++; return; }
+    var id = (typeof o.id==="string" && o.id && !recs[o.id]) ? o.id : newId();
+    var rec = {
+      id:id, kind:o.kind, date:o.date,
+      cur: o.cur==="usd" ? "usd" : "pln",
+      amount: a,
+      label: String(o.label || (o.kind==="chat"?"Платформа":o.kind==="vinted"?"Продажа":o.kind==="expense"?"Разное":"Другое")),
+      sub: o.sub ? String(o.sub) : "",
+      note: o.note ? String(o.note) : "",
+      at: Date.now()
+    };
+    if(o.kind==="chat"){ rec.pct = o.pct ? Number(o.pct) : null; rec.sales = o.sales ? Number(o.sales) : null; rec.agency = o.agency ? String(o.agency) : null; }
+    if(o.kind==="vinted") rec.pending = !!o.pending;
+    recs[id] = rec; ok++;
+    if(DB) DB.collection("records").doc(id).set(rec).then(function(){},function(){});
+  });
+  saveLocal(); render();
+  return "Добавлено записей: "+ok+(bad?", пропущено: "+bad:"");
+}
+
 function rateSheet(){
   return '<div class="hrow"><h2>Курс USD → PLN</h2><button class="x" data-close="1" aria-label="Закрыть"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></svg></button></div>'
   + '<div class="field"><label class="lbl" for="amt">1 доллар стоит</label><div class="amount"><input id="amt" inputmode="decimal" value="'+esc(ui.draft.amount)+'"><span>zł</span></div></div>'
@@ -469,7 +508,7 @@ function rateSheet(){
 function renderModal(){
   var host = document.getElementById("modal");
   if(!ui.modal){ host.innerHTML=""; return; }
-  var inner = ui.modal.kind==="add" ? addSheet() : ui.modal.kind==="edit" ? editSheet() : rateSheet();
+  var inner = ui.modal.kind==="add" ? addSheet() : ui.modal.kind==="edit" ? editSheet() : ui.modal.kind==="io" ? ioSheet() : rateSheet();
   host.innerHTML = '<div class="scrim" data-scrim="1"><div class="sheet">'+inner+'</div></div>';
 }
 
@@ -526,7 +565,7 @@ document.getElementById("fab").addEventListener("click", function(){
 });
 
 document.body.addEventListener("click", function(e){
-  var t = e.target.closest("[data-tab],[data-go],[data-cur],[data-rate],[data-day],[data-edit],[data-close],[data-scrim],[data-type],[data-src],[data-label],[data-cashin],[data-pending],[data-save],[data-update],[data-delete],[data-complete],[data-rate-save]");
+  var t = e.target.closest("[data-tab],[data-go],[data-cur],[data-rate],[data-day],[data-edit],[data-close],[data-scrim],[data-type],[data-src],[data-label],[data-cashin],[data-pending],[data-save],[data-update],[data-delete],[data-complete],[data-rate-save],[data-io],[data-export],[data-import]");
   if(!t) return;
   var d = t.dataset;
 
@@ -537,6 +576,18 @@ document.body.addEventListener("click", function(e){
   if(d.cur!==undefined){ ui.cur=d.cur; render(); return; }
   if(d.day!==undefined){ ui.day=+d.day; render(); return; }
   if(d.rate!==undefined){ ui.draft={amount:String(settings.rate).replace(".",",")}; ui.modal={kind:"rate"}; renderModal(); return; }
+  if(d.io!==undefined){ ui.draft={}; ui.modal={kind:"io"}; renderModal(); return; }
+  if(d.export!==undefined){
+    var ta = document.getElementById("io");
+    ta.value = JSON.stringify(list(), null, 1);
+    ta.focus(); ta.select();
+    flash("скопируйте текст"); return;
+  }
+  if(d.import!==undefined){
+    var ta2 = document.getElementById("io");
+    var msg = importRecords(ta2.value||"");
+    ui.modal=null; render(); flash(msg); return;
+  }
   if(d.edit!==undefined){
     var r = recs[d.edit]; if(!r) return;
     ui.draft = { amount: String(r.kind==="chat"&&r.pct ? (r.sales||r.amount) : r.amount).replace(".",",") };
