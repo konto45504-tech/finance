@@ -144,7 +144,7 @@ var MN = ["января","февраля","марта","апреля","мая","
 var MNOM = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
 var PLATFORMS = [["MV","LOCO",25],["4based","LOCO",25],["Fanvue","NO NAME",20],["OnlyFans","OF",25],["Другое",null,0]];
 var ACCOUNTS = ["Аккаунт 1","Аккаунт 2","Аккаунт 3"];
-var CATS = ["Подписки","Vinted","Одежда","Техника","Еда","Разное"];
+var CATS = ["Подписки","Vinted","Перегон","Одежда","Техника","Еда","Разное"];
 
 var DB = null;
 var recs = {};
@@ -394,6 +394,7 @@ function addSheet(){
   var isVin = d.type==="income" && d.src==="Vinted";
   var isOther = d.type==="income" && d.src==="Другое";
   var isCash = d.type==="cash";
+  var isMove = d.type==="expense" && d.src==="Перегон";
   var plat = isChat ? PLATFORMS.filter(function(p){ return p[0]===d.label; })[0] : null;
   var pct = plat ? plat[2] : 0;
   var amt = parseFloat(String(d.amount).replace(",",".")) || 0;
@@ -421,13 +422,21 @@ function addSheet(){
        + ACCOUNTS.map(function(a){ return chipSm(a, d.label===a, 'data-label="'+esc(a)+'"'); }).join("")
        + '</div></div>';
   }
+  if(isMove){
+    h += '<div class="field"><span class="lbl">Откуда</span><div class="chips">'
+       + ACCOUNTS.map(function(a){ return chipSm(a, (d.from||ACCOUNTS[1])===a, 'data-from="'+esc(a)+'"'); }).join("")
+       + '</div></div>'
+       + '<div class="field"><span class="lbl">Куда</span><div class="chips">'
+       + ACCOUNTS.map(function(a){ return chipSm(a, (d.to||ACCOUNTS[0])===a, 'data-to="'+esc(a)+'"'); }).join("")
+       + '</div></div>';
+  }
   if(isCash){
     h += '<div class="field"><span class="lbl">Что делаем</span><div class="chips">'
        + chip("Положил", d.cashIn!==false, 'data-cashin="1"')
        + chip("Взял", d.cashIn===false, 'data-cashin="0"')
        + '</div></div>';
   }
-  h += '<div class="field"><label class="lbl" for="amt">'+(isChat&&pct?"Сумма продаж":"Сумма")+'</label>'
+  h += '<div class="field"><label class="lbl" for="amt">'+(isChat&&pct?"Сумма продаж":isMove?"Сколько потеряли на перегоне":"Сумма")+'</label>'
      + '<div class="amount"><input id="amt" inputmode="decimal" placeholder="0" value="'+esc(d.amount)+'"><span>'+(isChat?"$":"zł")+'</span></div>'
      + (isChat&&pct ? '<div class="r"><span class="hint">Твоя доля · '+pct+'%</span><span style="font-size:15px;font-weight:500;color:var(--acc)">$'+(amt*pct/100).toFixed(2)+'</span></div>' : "")
      + '</div>';
@@ -435,7 +444,7 @@ function addSheet(){
     h += '<button class="toggle'+(d.pending?" on":"")+'" data-pending="1"><span><span class="t">В процессе</span><span class="s">не попадёт в итог, пока продажа не завершится</span></span><span class="sw"><i></i></span></button>';
   }
   h += '<div class="field"><label class="lbl" for="dt">Дата</label><input class="txt" id="dt" type="date" value="'+esc(d.date)+'"></div>';
-  h += '<div class="field"><label class="lbl" for="nt">'+(isOther||isCash?"Комментарий":"Заметка (необязательно)")+'</label><input class="txt" id="nt" placeholder="'+(isOther?"например: подработка":isCash?"например: с продажи шарфа":"например: шарф")+'" value="'+esc(d.note)+'"></div>';
+  h += '<div class="field"><label class="lbl" for="nt">'+(isOther||isCash?"Комментарий":"Заметка (необязательно)")+'</label><input class="txt" id="nt" placeholder="'+(isOther?"например: подработка":isCash?"например: с продажи шарфа":isMove?"например: перегнал 600 zł":"например: шарф")+'" value="'+esc(d.note)+'"></div>';
   h += '<div class="btns"><button class="primary" data-save="1"'+(amt>0?"":" disabled")+'>Сохранить</button></div>';
   return h;
 }
@@ -566,7 +575,7 @@ document.getElementById("fab").addEventListener("click", function(){
 });
 
 document.body.addEventListener("click", function(e){
-  var t = e.target.closest("[data-tab],[data-go],[data-cur],[data-rate],[data-day],[data-edit],[data-close],[data-scrim],[data-type],[data-src],[data-label],[data-cashin],[data-pending],[data-save],[data-update],[data-delete],[data-complete],[data-rate-save],[data-io],[data-export],[data-import],[data-clear]");
+  var t = e.target.closest("[data-tab],[data-go],[data-cur],[data-rate],[data-day],[data-edit],[data-close],[data-scrim],[data-type],[data-src],[data-label],[data-cashin],[data-pending],[data-save],[data-update],[data-delete],[data-complete],[data-rate-save],[data-io],[data-export],[data-import],[data-clear],[data-from],[data-to]");
   if(!t) return;
   var d = t.dataset;
 
@@ -616,6 +625,8 @@ document.body.addEventListener("click", function(e){
     dr.pending=false; renderModal(); return;
   }
   if(d.label!==undefined){ dr.label=d.label; renderModal(); return; }
+  if(d.from!==undefined){ dr.from=d.from; renderModal(); return; }
+  if(d.to!==undefined){ dr.to=d.to; renderModal(); return; }
   if(d.cashin!==undefined){ dr.cashIn = d.cashin==="1"; renderModal(); return; }
   if(d.pending!==undefined){ dr.pending=!dr.pending; renderModal(); return; }
 
@@ -637,7 +648,9 @@ document.body.addEventListener("click", function(e){
     } else if(dr.type==="cash"){
       rec = { id:id, kind:"cash", cur:"pln", amount: dr.cashIn===false ? -v : v, label: dr.cashIn===false?"Взял":"Положил", sub:"Наличные дома", date:date, note:note, at:Date.now() };
     } else {
-      rec = { id:id, kind:"expense", cur:"pln", amount:v, label:dr.src, sub:"Расход", date:date, note:note, at:Date.now() };
+      var esub = "Расход";
+      if(dr.src==="Перегон") esub = (dr.from||ACCOUNTS[1])+" → "+(dr.to||ACCOUNTS[0]);
+      rec = { id:id, kind:"expense", cur:"pln", amount:v, label:dr.src, sub:esub, date:date, note:note, at:Date.now() };
     }
     ui.modal=null; ui.month = ym(date); putRec(id, rec); return;
   }
