@@ -107,6 +107,33 @@ h1{margin:0;font-size:26px;font-weight:600;letter-spacing:-0.3px}
 .hint{font-size:12px;color:var(--dim)}
 .sync{position:absolute;top:calc(env(safe-area-inset-top) + 22px);left:50%;transform:translateX(-50%);font-size:11px;color:var(--dim);background:var(--card);border:1px solid var(--line);border-radius:12px;padding:3px 10px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:20}
 .sync.on{opacity:1}
+
+/* --- оформление --- */
+.page{gap:18px}
+.card{border-radius:26px;padding:22px}
+.hero{position:relative;background:var(--acc);border:none;color:#06160A;padding:24px 22px;box-shadow:0 18px 50px -18px rgba(184,242,58,.55)}
+.hero .lbl{color:rgba(6,22,10,.62)}
+.hero .big{color:#06160A;font-size:46px;font-weight:700;letter-spacing:-1.4px;line-height:1}
+.hero .seg{background:rgba(6,22,10,.10)}
+.hero .seg button{color:rgba(6,22,10,.55)}
+.hero .seg button.on{background:#06160A;color:var(--acc)}
+.hero .rate{color:rgba(6,22,10,.62)}
+.hero .rate u{text-decoration-color:rgba(6,22,10,.35)}
+.mid{font-size:36px;letter-spacing:-1px}
+.tile{padding:18px 16px;border-radius:22px}
+.tile .v{font-size:22px;font-weight:600;letter-spacing:-0.4px}
+.item{padding:16px 0}
+.list{border-radius:20px}
+button{transition:transform .12s ease,opacity .12s ease}
+button:active{transform:scale(.97)}
+.pend{gap:10px}
+.pendmain{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;text-align:left;color:var(--txt)}
+.done{width:40px;height:40px;border-radius:20px;background:rgba(184,242,58,.14);color:var(--acc);display:flex;align-items:center;justify-content:center;flex:none}
+.selbox{border-radius:18px;padding:16px}
+.item .s{display:block}
+.hero .lbl{color:rgba(6,22,10,.72)}
+.hero .rate{color:rgba(6,22,10,.72)}
+.fab{box-shadow:0 10px 34px rgba(184,242,58,.34)}
 </style>
 </head>
 <body>
@@ -311,14 +338,33 @@ function groupHTML(arr, key, sign){
 }
 
 /* ---------- pages ---------- */
+var lastTotal = 0, heroDone = false;
+function animateHero(){
+  var el = document.getElementById("heroNum");
+  if(!el || heroDone || !lastTotal) return;
+  heroDone = true;
+  var target = lastTotal, t0 = null;
+  function step(ts){
+    if(t0===null) t0 = ts;
+    var k = Math.min((ts-t0)/750, 1);
+    var e = 1 - Math.pow(1-k, 3);
+    var node = document.getElementById("heroNum");
+    if(!node) return;
+    node.textContent = money(target*e);
+    if(k<1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
 function pageOverview(key){
   var chat = inMonth(key,"chat"), vin = inMonth(key,"vinted"), other = inMonth(key,"other");
   var vinDone = vin.filter(function(r){ return !r.pending; });
   var vinPend = vin.filter(function(r){ return r.pending; });
   var total = sumUsd(chat)+sumUsd(vinDone)+sumUsd(other);
   var exp = sumUsd(inMonth(key,"expense"));
-  return '<div class="card"><span class="lbl">ЗАРАБОТОК · '+esc(monthName(key).toUpperCase())+'</span>'
-  + '<span class="big">'+money(total)+'</span>'
+  lastTotal = total;
+  return '<div class="card hero"><span class="lbl">ЗАРАБОТОК · '+esc(monthName(key).toUpperCase())+'</span>'
+  + '<span class="big" id="heroNum">'+money(total)+'</span>'
   + '<div class="seg"><button data-cur="usd" class="'+(ui.cur==="usd"?"on":"")+'">USD $</button><button data-cur="pln" class="'+(ui.cur==="pln"?"on":"")+'">PLN zł</button></div>'
   + '<button class="rate" data-rate="1">Курс: 1 USD = <u>'+nf(settings.rate).replace(",00","")+'</u> PLN · изменить</button></div>'
   + chartHTML(key)
@@ -360,7 +406,12 @@ function pageVinted(key){
   + '</div>'
   + (Object.keys(byAcc).length ? '<div class="list">'+Object.keys(byAcc).sort().map(function(a){
       return '<div class="item"><span class="t">'+esc(a)+'</span><span class="v">'+money(byAcc[a])+'</span></div>'; }).join("")+'</div>' : "")
-  + (pend.length ? '<span class="lbl" style="padding:6px 4px 0">В ПРОЦЕССЕ</span><div class="list">'+pend.map(function(r){ return itemHTML(r,""); }).join("")+'</div>' : "")
+  + (pend.length ? '<span class="lbl" style="padding:6px 4px 0">В ПРОЦЕССЕ</span><div class="list">'+pend.map(function(r){
+      return '<div class="item pend">'
+      + '<button class="pendmain" data-edit="'+r.id+'"><span class="t">'+esc(r.label)+'</span><span class="s">'+esc(r.sub||"")+(r.note?" · "+esc(r.note):"")+'</span></button>'
+      + '<span class="v" style="color:var(--dim)">'+moneyRec(r)+'</span>'
+      + '<button class="done" data-finish="'+r.id+'" aria-label="Завершить продажу"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg></button>'
+      + '</div>'; }).join("")+'</div>' : "")
   + (done.length ? '<span class="lbl" style="padding:6px 4px 0">ИСТОРИЯ · нажмите, чтобы изменить</span>'+groupHTML(done,key,"+") : (pend.length?"":'<div class="empty">За этот месяц записей нет</div>'));
 }
 function pageExpenses(key){
@@ -542,6 +593,7 @@ function render(){
   document.getElementById("p3").innerHTML = pageExpenses(k);
   document.getElementById("p4").innerHTML = pageCash(k);
   renderModal();
+  animateHero();
 }
 
 function goPage(i){
@@ -575,7 +627,7 @@ document.getElementById("fab").addEventListener("click", function(){
 });
 
 document.body.addEventListener("click", function(e){
-  var t = e.target.closest("[data-tab],[data-go],[data-cur],[data-rate],[data-day],[data-edit],[data-close],[data-scrim],[data-type],[data-src],[data-label],[data-cashin],[data-pending],[data-save],[data-update],[data-delete],[data-complete],[data-rate-save],[data-io],[data-export],[data-import],[data-clear],[data-from],[data-to]");
+  var t = e.target.closest("[data-tab],[data-go],[data-cur],[data-rate],[data-day],[data-edit],[data-close],[data-scrim],[data-type],[data-src],[data-label],[data-cashin],[data-pending],[data-save],[data-update],[data-delete],[data-complete],[data-rate-save],[data-io],[data-export],[data-import],[data-clear],[data-from],[data-to],[data-finish]");
   if(!t) return;
   var d = t.dataset;
 
@@ -604,6 +656,11 @@ document.body.addEventListener("click", function(e){
     var ta2 = document.getElementById("io");
     var msg = importRecords(ta2.value||"");
     ui.modal=null; render(); flash(msg); return;
+  }
+  if(d.finish!==undefined){
+    var fr = recs[d.finish];
+    if(fr){ var fc = JSON.parse(JSON.stringify(fr)); fc.pending=false; putRec(fc.id, fc); flash("продажа завершена"); }
+    return;
   }
   if(d.edit!==undefined){
     var r = recs[d.edit]; if(!r) return;
