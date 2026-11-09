@@ -228,7 +228,7 @@ var CATS = ["Подписки","Vinted","Техника","Лично","Разн�
 var VSUB = ["Закупка","Перегон","Прокси","ADS Power","Другое"];
 
 var DB = null, recs = {}, LS = "fin_v1";
-var settings = { rate:3.93, goalChat:1000, goalVinted:3000 };
+var settings = { rate:3.93, goalChat:1000, goalVinted:3000, tpls:[] };
 var ui = { page:0, cur:"usd", month:null, mpick:null, modal:null, draft:null, justDone:null };
 
 function pad(n){ return n<10 ? "0"+n : ""+n; }
@@ -307,6 +307,25 @@ function delRec(id){
   flash("удалено");
 }
 function putSettings(){ saveLocal(); if(DB) DB.doc("settings/app").set(settings).then(function(){},function(){}); }
+
+/* ---------- повторяющиеся расходы ---------- */
+function applyTemplates(){
+  if(!settings.tpls || !settings.tpls.length) return;
+  var key = ym(todayISO()), dnow = dayOf(todayISO()), made = 0;
+  settings.tpls.forEach(function(t){
+    var day = Math.min(Math.max(t.day||1,1),28);
+    if(day > dnow) return;
+    var exists = list().some(function(r){ return r.tpl===t.id && ym(r.date)===key; });
+    if(exists) return;
+    var id = newId();
+    var rec = { id:id, kind:"expense", cur:t.cur||"pln", amount:t.amount, label:t.label,
+      sub:(t.sub||"")+(t.sub?" · ":"")+"каждый месяц", date:key+"-"+pad(day), note:t.note||"", tpl:t.id, at:Date.now() };
+    recs[id] = rec; made++;
+    if(DB) DB.collection("records").doc(id).set(rec).then(function(){},function(){});
+  });
+  if(made){ saveLocal(); flash("добавлено по подписке: "+made); }
+  return made;
+}
 
 /* ---------- конфетти ---------- */
 var cv, cx, bits = [], raf = null;
@@ -569,6 +588,7 @@ function addSheet(){
     + '<div class="amount"><input id="amt" inputmode="decimal" placeholder="0" value="'+esc(d.amount)+'"><span>'+(isChat?"$":"zł")+'</span></div>'
     + (isChat&&pct ? '<div class="share"><span>Твоя доля · '+pct+'%</span><b class="num">$'+(amt*pct/100).toFixed(2)+'</b></div>' : "")
     + '</div>';
+  if(exp) h += '<button class="toggle'+(d.repeat?" on":"")+'" data-repeat="1"><span><b>Каждый месяц</b><small>будет добавляться сам, повторы можно убрать в настройках</small></span><span class="sw"><i></i></span></button>';
   if(isVin) h += '<button class="toggle'+(d.pending?" on":"")+'" data-pending="1"><span><b>В процессе</b><small>не попадёт в итог, пока не завершится</small></span><span class="sw"><i></i></span></button>';
   h += '<div class="field"><label class="flab" for="dt">Дата</label><input class="txt" id="dt" type="date" value="'+esc(d.date)+'"></div>';
   h += '<div class="field"><label class="flab" for="nt">'+(isOther||cashOut||d.src==="Лично"?"Комментарий":"Заметка")+'</label>'
@@ -602,6 +622,11 @@ function gearSheet(){
   + '<div class="field"><label class="flab" for="g1">Цель по чаттингу, $ в месяц</label><input class="txt" id="g1" inputmode="decimal" value="'+settings.goalChat+'"></div>'
   + '<div class="field"><label class="flab" for="g2">Цель по Vinted, zł в месяц</label><input class="txt" id="g2" inputmode="decimal" value="'+settings.goalVinted+'"></div>'
   + '<div class="btns"><button class="primary" data-setsave="1">Сохранить</button></div>'
+  + ((settings.tpls && settings.tpls.length) ? '<div class="field"><span class="flab">Повторяющиеся расходы</span><div class="list">'
+      + settings.tpls.map(function(t){
+          return '<div class="li"><span>'+esc(t.label)+'<small>'+(t.sub?esc(t.sub)+' · ':'')+nf(t.amount)+' zł · '+t.day+' числа</small></span>'
+          + '<button class="x danger" data-untpl="'+esc(t.id)+'" aria-label="Убрать повтор"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></svg></button></div>';
+        }).join("")+'</div><span class="hint">Крестик убирает только повтор, уже созданные записи остаются.</span></div>' : "")
   + '<div class="field"><span class="flab">Данные</span>'
   + '<textarea id="io" class="txt" style="height:120px;padding:12px 16px;resize:none;line-height:1.4;font-size:12.5px;background:var(--ink);border:1px solid var(--line-2);border-radius:16px;color:var(--text)" placeholder="Вставьте сюда текст для импорта"></textarea></div>'
   + '<div class="btns"><button class="ghost" data-export="1">Выгрузить</button><button class="primary" data-import="1">Добавить записи</button></div>'
@@ -626,6 +651,7 @@ function importRecords(text){
     if(o.kind==="chat"){ rec.pct=o.pct?Number(o.pct):null; rec.sales=o.sales?Number(o.sales):null; rec.agency=o.agency?String(o.agency):null; }
     if(o.kind==="vinted") rec.pending = !!o.pending;
     if(o.cat) rec.cat = String(o.cat);
+    if(o.tpl) rec.tpl = String(o.tpl);
     recs[id]=rec; ok++;
     if(DB) DB.collection("records").doc(id).set(rec).then(function(){},function(){});
   });
@@ -697,7 +723,7 @@ document.getElementById("fab").addEventListener("click", function(){
 });
 
 document.body.addEventListener("click", function(e){
-  var t = e.target.closest("[data-tab],[data-go],[data-cur],[data-rate],[data-m],[data-edit],[data-finish],[data-close],[data-scrim],[data-type],[data-src],[data-sub],[data-label],[data-from],[data-to],[data-cat],[data-cashin],[data-pending],[data-save],[data-update],[data-delete],[data-complete],[data-setsave],[data-export],[data-import],[data-clear]");
+  var t = e.target.closest("[data-tab],[data-go],[data-cur],[data-rate],[data-m],[data-edit],[data-finish],[data-close],[data-scrim],[data-type],[data-src],[data-sub],[data-label],[data-from],[data-to],[data-cat],[data-cashin],[data-pending],[data-save],[data-update],[data-delete],[data-complete],[data-setsave],[data-export],[data-import],[data-clear],[data-repeat],[data-untpl]");
   if(!t) return;
   var d = t.dataset, dr = ui.draft || {};
 
@@ -747,6 +773,7 @@ document.body.addEventListener("click", function(e){
   if(d.cat!==undefined){ dr.cat=d.cat; renderModal(); return; }
   if(d.cashin!==undefined){ dr.cashIn = d.cashin==="1"; renderModal(); return; }
   if(d.pending!==undefined){ dr.pending = !dr.pending; renderModal(); return; }
+  if(d.repeat!==undefined){ dr.repeat = !dr.repeat; renderModal(); return; }
 
   if(d.save!==undefined){
     var v = parseFloat(String(document.getElementById("amt").value).replace(",",".")); if(!(v>0)) return;
@@ -777,6 +804,11 @@ document.body.addEventListener("click", function(e){
         if(dr.sub==="Перегон") esub = "Перегон · "+(dr.from||ACCOUNTS[1])+" → "+(dr.to||ACCOUNTS[0]);
       }
       rec = { id:id, kind:"expense", cur:"pln", amount:v, label:dr.src, sub:esub, date:date, note:note, at:Date.now() };
+      if(dr.repeat){
+        var tid = "t"+Date.now().toString(36);
+        settings.tpls = (settings.tpls||[]).concat([{ id:tid, label:dr.src, sub:esub, amount:v, cur:"pln", day:dayOf(date), note:note }]);
+        rec.tpl = tid; putSettings();
+      }
     }
     ui.modal = null; ui.month = ym(date); ui.mpick = null;
     putRec(id, rec);
@@ -810,6 +842,10 @@ document.body.addEventListener("click", function(e){
     if(g1>0) settings.goalChat = g1;
     if(g2>0) settings.goalVinted = g2;
     putSettings(); ui.modal=null; shownTotal=null; render(); flash("настройки сохранены"); return;
+  }
+  if(d.untpl!==undefined){
+    settings.tpls = (settings.tpls||[]).filter(function(t){ return t.id!==d.untpl; });
+    putSettings(); renderModal(); flash("повтор убран"); return;
   }
   if(d.export!==undefined){
     var ta = document.getElementById("io");
@@ -845,6 +881,7 @@ addEventListener("resize", function(){ sizeFx(); });
 
 /* ---------- старт ---------- */
 loadLocal();
+applyTemplates();
 render();
 
 var hasClaude = false;
@@ -863,7 +900,7 @@ if(hasClaude) claude.use("db").then(function(db){
       localOnly.forEach(function(k){ DB.collection("records").doc(k).set(recs[k]); });
       return;
     }
-    recs = fresh; saveLocal(); shownTotal=null; render();
+    recs = fresh; applyTemplates(); saveLocal(); shownTotal=null; render();
   }, function(){});
 }, function(){});
 
