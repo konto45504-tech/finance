@@ -67,6 +67,13 @@ background:linear-gradient(115deg,transparent 38%,rgba(255,255,255,.16) 48%,tran
 .sum{position:relative;font-family:var(--display);font-weight:900;font-size:clamp(34px,10.5vw,48px);line-height:1;margin-top:11px;
 color:var(--lime);text-shadow:0 0 26px rgba(198,255,61,.45),0 0 70px rgba(198,255,61,.18);word-break:break-word}
 .sum.pale{color:var(--text);text-shadow:none}
+.sum.long{font-size:clamp(27px,8.4vw,39px)}
+.sum.xlong{font-size:clamp(22px,6.8vw,32px);letter-spacing:-.02em}
+.env .v.long{font-size:clamp(25px,7.6vw,35px)}
+.env .v.xlong{font-size:clamp(21px,6.4vw,29px)}
+.tabsw{position:relative}
+.tabsw::after{content:"";position:absolute;right:0;top:0;bottom:0;width:26px;pointer-events:none;
+background:linear-gradient(90deg,transparent,var(--ink))}
 .slot{position:relative;min-height:28px;margin-top:7px}
 .slot .sl{position:absolute;inset:0;display:flex;align-items:center;color:var(--mute);font-size:13px;transition:opacity .25s}
 .slot .sl.hide{opacity:0}
@@ -198,7 +205,7 @@ background:var(--ink-2);border:1px solid var(--line);border-radius:12px;padding:
       <button class="gear" id="gear" aria-label="Настройки"><svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></button>
     </div>
   </div>
-  <div class="tabs" id="tabs"></div>
+  <div class="tabsw"><div class="tabs" id="tabs"></div></div>
 </header>
 <div class="pages" id="pages">
   <section class="page" id="p0"></section>
@@ -251,6 +258,7 @@ function usdOf(r){ return r.cur==="usd" ? r.amount : r.amount/settings.rate; }
 function money(usd){ return ui.cur==="usd" ? (usd<0?"−":"")+"$"+Math.abs(usd).toFixed(2) : nf(usd*settings.rate)+" zł"; }
 function moneyPln(p){ return ui.cur==="usd" ? (p<0?"−":"")+"$"+Math.abs(p/settings.rate).toFixed(2) : nf(p)+" zł"; }
 function moneyRec(r){ return money(usdOf(r)); }
+function fitCls(str){ var n = String(str).length; return n>=14 ? " xlong" : n>=11 ? " long" : ""; }
 
 function list(){ var a=[]; for(var k in recs) if(recs[k]) a.push(recs[k]); return a; }
 function inMonth(key,kind){
@@ -423,7 +431,7 @@ function pageOverview(key){
   if(shownTotal===null) shownTotal = total;
   return '<div class="hero" id="hero">'
   + '<div class="cap">ЗАРАБОТОК · '+esc(monthName(key).toUpperCase())+'</div>'
-  + '<div class="sum num" id="heroSum">'+money(total)+'</div>'
+  + '<div class="sum num'+fitCls(money(total))+'" id="heroSum">'+money(total)+'</div>'
   + '<div class="slot"><span class="sl" id="heroSl">Чаттинг '+money(chat)+' · Vinted '+money(vinDone)+'</span><span class="riser" id="riser"></span></div>'
   + '<div class="seg"><button data-cur="usd" class="'+(ui.cur==="usd"?"on":"")+'">USD $</button><button data-cur="pln" class="'+(ui.cur==="pln"?"on":"")+'">PLN zł</button></div>'
   + '<button class="rate" data-rate="1">Курс: 1 USD = <u>'+nf(settings.rate).replace(",00","")+'</u> PLN</button>'
@@ -457,7 +465,7 @@ function pageChat(key){
   var sales = arr.reduce(function(s,r){ return s + (r.sales||0); },0);
   return '<div class="hero flat">'
   + '<div class="cap">ЧАТТИНГ · '+esc(monthName(key).toUpperCase())+'</div>'
-  + '<div class="sum num">'+money(tot)+'</div>'
+  + '<div class="sum num'+fitCls(money(tot))+'">'+money(tot)+'</div>'
   + '<div class="slot"><span class="sl">'+(sales?"Продажи $"+sales.toFixed(2)+" · ваша доля":"Чистыми за месяц")+'</span></div>'
   + '</div>'
   + '<div class="goal"><div class="gt"><span>Цель месяца — '+money(goal)+'</span><b>'+pct+'%</b></div>'
@@ -480,7 +488,7 @@ function pageVinted(key){
   done.forEach(function(r){ var a = r.sub||"Без аккаунта"; byAcc[a] = (byAcc[a]||0)+usdOf(r); });
   return '<div class="hero flat">'
   + '<div class="cap">VINTED · '+esc(monthName(key).toUpperCase())+'</div>'
-  + '<div class="sum num">'+moneyPln(totP)+'</div>'
+  + '<div class="sum num'+fitCls(moneyPln(totP))+'">'+moneyPln(totP)+'</div>'
   + '<div class="slot"><span class="sl">'+done.length+' завершено'+(pend.length?" · "+pend.length+" в процессе":"")+'</span></div>'
   + '</div>'
   + '<div class="goal"><div class="gt"><span>Цель месяца — '+moneyPln(goal)+'</span><b>'+pct+'%</b></div>'
@@ -510,7 +518,7 @@ function pageExpenses(key){
   var cats = Object.keys(byCat).sort(function(a,b){ return byCat[b]-byCat[a]; });
   return '<div class="hero flat">'
   + '<div class="cap q">ПОТРАЧЕНО · '+esc(monthName(key).toUpperCase())+'</div>'
-  + '<div class="sum pale num">'+money(sum)+'</div>'
+  + '<div class="sum pale num'+fitCls(money(sum))+'">'+money(sum)+'</div>'
   + '<div class="slot"><span class="sl">'+all.length+' покупок · '+cats.length+' категорий</span></div>'
   + '</div>'
   + (cats.length ? '<div class="tiles">'+cats.map(function(c){
@@ -532,7 +540,7 @@ function pageCash(key){
   var all = list().filter(function(r){ return r.kind==="cash"; });
   var total = sumUsd(all);
   var arr = inMonth(key,"cash");
-  return '<div class="env"><em>НАЛИЧНЫЕ ДОМА</em><div class="v num">'+money(total)+'</div>'
+  return '<div class="env"><em>НАЛИЧНЫЕ ДОМА</em><div class="v num'+fitCls(money(total))+'">'+money(total)+'</div>'
   + '<p>'+(arr.length ? arr.length+" движений за "+monthName(key).split(" ")[0].toLowerCase() : "за этот месяц движений не было")+'</p></div>'
   + (arr.length ? '<div class="sec">ДВИЖЕНИЯ · нажмите, чтобы изменить</div><div class="list">'
       + arr.map(function(r){
