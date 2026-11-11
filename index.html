@@ -225,6 +225,7 @@ background:var(--ink-2);border:1px solid var(--line);border-radius:12px;padding:
 (function(){
 "use strict";
 
+var APP_VERSION = "12 ноября, 13:00";
 var TABS = ["Обзор","Чаттинг","Vinted","Расходы","Наличные"];
 var MN = ["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];
 var MSHORT = ["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"];
@@ -639,6 +640,7 @@ function gearSheet(){
   + '<textarea id="io" class="txt" style="height:120px;padding:12px 16px;resize:none;line-height:1.4;font-size:12.5px;background:var(--ink);border:1px solid var(--line-2);border-radius:16px;color:var(--text)" placeholder="Вставьте сюда текст для импорта"></textarea></div>'
   + '<div class="btns"><button class="ghost" data-export="1">Выгрузить</button><button class="primary" data-import="1">Добавить записи</button></div>'
   + '<span class="hint">«Выгрузить» показывает все записи текстом — это резервная копия, сохраните её себе.</span>'
+  + '<span class="hint" style="text-align:center">Версия приложения: '+APP_VERSION+'</span>'
   + '<button class="wide danger" data-clear="1">'+((ui.draft&&ui.draft.confirmClear)?"Нажмите ещё раз — записи сотрутся":"Удалить все записи")+'</button>';
 }
 
