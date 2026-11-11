@@ -229,7 +229,7 @@ var TABS = ["Обзор","Чаттинг","Vinted","Расходы","Налич�
 var MN = ["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];
 var MSHORT = ["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"];
 var MNOM = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
-var PLATFORMS = [["MV","LOCO",25],["4based","LOCO",25],["Fanvue","NO NAME",20],["OnlyFans","OF",25],["Другое",null,0]];
+var PLATFORMS = [["MV","LOCO",25],["OnlyFans","OF",25],["Другое",null,0]];
 var ACCOUNTS = ["Аккаунт 1","Аккаунт 2","Аккаунт 3"];
 var CATS = ["Подписки","Vinted","Техника","Лично","Разное"];
 var VSUB = ["Закупка","Перегон","Прокси","ADS Power","Другое"];
@@ -725,7 +725,7 @@ document.getElementById("gear").addEventListener("click", function(){
   ui.draft = {}; ui.modal = { kind:"gear" }; renderModal();
 });
 document.getElementById("fab").addEventListener("click", function(){
-  ui.draft = { type:"income", src:"Чаттинг", label:"Fanvue", sub:VSUB[0], amount:"", pending:false,
+  ui.draft = { type:"income", src:"Чаттинг", label:"MV", sub:VSUB[0], amount:"", pending:false,
                date:todayISO(), note:"", cashIn:true, cat:"Лично" };
   ui.modal = { kind:"add" }; renderModal();
 });
@@ -765,12 +765,12 @@ document.body.addEventListener("click", function(e){
   if(d.type!==undefined){
     dr.type = d.type;
     dr.src = d.type==="income" ? "Чаттинг" : CATS[0];
-    dr.label = d.type==="income" ? "Fanvue" : CATS[0];
+    dr.label = d.type==="income" ? "MV" : CATS[0];
     dr.pending = false; renderModal(); return;
   }
   if(d.src!==undefined){
     dr.src = d.src;
-    if(dr.type==="income") dr.label = d.src==="Чаттинг" ? "Fanvue" : d.src==="Vinted" ? ACCOUNTS[0] : d.src;
+    if(dr.type==="income") dr.label = d.src==="Чаттинг" ? "MV" : d.src==="Vinted" ? ACCOUNTS[0] : d.src;
     else { dr.label = d.src; dr.sub = VSUB[0]; }
     dr.pending = false; renderModal(); return;
   }
@@ -789,7 +789,7 @@ document.body.addEventListener("click", function(e){
     var note = document.getElementById("nt").value || "";
     var id = newId(), rec, delta = 0;
     if(dr.type==="income" && dr.src==="Чаттинг"){
-      var p = PLATFORMS.filter(function(x){ return x[0]===dr.label; })[0] || PLATFORMS[2];
+      var p = PLATFORMS.filter(function(x){ return x[0]===dr.label; })[0] || PLATFORMS[0];
       var own = p[2] ? v*p[2]/100 : v;
       rec = { id:id, kind:"chat", cur:"usd", amount:own, sales:p[2]?v:null, pct:p[2]||null, agency:p[1],
         label:p[0], sub:(p[1]?p[1]:"")+(p[2]?" · "+p[2]+"%":" · своя сумма"), date:date, note:note, at:Date.now() };
