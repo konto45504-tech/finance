@@ -225,7 +225,7 @@ background:var(--ink-2);border:1px solid var(--line);border-radius:12px;padding:
 (function(){
 "use strict";
 
-var APP_VERSION = "12 ноября, 13:00";
+var APP_VERSION = "14 ноября, 14:10";
 var TABS = ["Обзор","Чаттинг","Vinted","Расходы","Наличные"];
 var MN = ["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];
 var MSHORT = ["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"];
@@ -278,7 +278,7 @@ function monthsAvailable(){
 }
 /* доход месяца: чаттинг + vinted завершённые + другое + списания наличных не считаем */
 function incomeOf(key){
-  return sumUsd(inMonth(key,"chat"))
+  return sumUsd(inMonth(key,"chat").filter(function(r){ return !r.pending; }))
        + sumUsd(inMonth(key,"vinted").filter(function(r){ return !r.pending; }))
        + sumUsd(inMonth(key,"other"));
 }
@@ -422,7 +422,9 @@ function monthsBlock(key){
 }
 
 function pageOverview(key){
-  var chat = sumUsd(inMonth(key,"chat"));
+  var chatAll = inMonth(key,"chat");
+  var chat = sumUsd(chatAll.filter(function(r){ return !r.pending; }));
+  var chatPend = sumUsd(chatAll.filter(function(r){ return r.pending; }));
   var vin = inMonth(key,"vinted");
   var vinDone = sumUsd(vin.filter(function(r){ return !r.pending; }));
   var vinPend = sumUsd(vin.filter(function(r){ return r.pending; }));
@@ -439,7 +441,7 @@ function pageOverview(key){
   + monthsBlock(key)
   + '</div>'
   + '<div class="list">'
-  + '<button class="li" data-go="1"><span>Чаттинг<small>LOCO · NO NAME · OF</small></span><b class="num">'+money(chat)+'</b></button>'
+  + '<button class="li" data-go="1"><span>Чаттинг<small>'+(chatPend?"в ожидании "+money(chatPend):"по агентствам")+'</small></span><b class="num">'+money(chat)+'</b></button>'
   + '<button class="li" data-go="2"><span>Vinted<small>'+(vinPend?"в процессе "+money(vinPend):"три аккаунта")+'</small></span><b class="num">'+money(vinDone)+'</b></button>'
   + '<button class="li" data-go="3"><span>Расходы<small>за месяц</small></span><b class="num">'+money(exp)+'</b></button>'
   + '<div class="li"><span>Итог месяца<small>доход минус расходы</small></span><b class="num" style="color:'+(total-exp>=0?"var(--lime)":"var(--bad)")+'">'+money(total-exp)+'</b></div>'
@@ -455,8 +457,11 @@ function rowHTML(r){
 }
 
 function pageChat(key){
-  var arr = inMonth(key,"chat");
+  var allc = inMonth(key,"chat");
+  var pend = allc.filter(function(r){ return r.pending; });
+  var arr = allc.filter(function(r){ return !r.pending; });
   var tot = sumUsd(arr);
+  var pendSum = sumUsd(pend);
   var goal = settings.goalChat || 1000;
   var pct = Math.round(tot/goal*100);
   var byAg = {};
@@ -469,6 +474,13 @@ function pageChat(key){
   + '<div class="sum num'+fitCls(money(tot))+'">'+money(tot)+'</div>'
   + '<div class="slot"><span class="sl">'+(sales?"Продажи $"+sales.toFixed(2)+" · ваша доля":"Чистыми за месяц")+'</span></div>'
   + '</div>'
+  + (pend.length ? '<div class="sec">В ОЖИДАНИИ · '+money(pendSum)+'</div><div class="list">'
+      + pend.map(function(r){
+          var on = ui.justDone===r.id;
+          return '<div class="pend"><button class="pt" data-edit="'+r.id+'"><b>'+esc(r.label)+'</b><small>'+esc(r.sub||"")+(r.note?" · "+esc(r.note):"")+' · '+dayOf(r.date)+" "+genOf(ym(r.date))+'</small></button>'
+          + '<span class="pv num">'+moneyRec(r)+'</span>'
+          + '<button class="ok'+(on?" on":"")+'" data-finish="'+r.id+'" aria-label="Деньги пришли"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg></button></div>';
+        }).join("")+'</div>' : "")
   + '<div class="goal"><div class="gt"><span>Цель месяца — '+money(goal)+'</span><b>'+pct+'%</b></div>'
   + '<div class="gbar"><i style="width:'+Math.min(pct,100)+'%"></i></div>'
   + '<div class="gt"><span>'+(tot>=goal ? "Цель взята" : "Осталось "+money(goal-tot))+'</span><span>'+arr.length+' записей</span></div></div>'
@@ -598,7 +610,7 @@ function addSheet(){
     + (isChat&&pct ? '<div class="share"><span>Твоя доля · '+pct+'%</span><b class="num">$'+(amt*pct/100).toFixed(2)+'</b></div>' : "")
     + '</div>';
   if(exp) h += '<button class="toggle'+(d.repeat?" on":"")+'" data-repeat="1"><span><b>Каждый месяц</b><small>будет добавляться сам, повторы можно убрать в настройках</small></span><span class="sw"><i></i></span></button>';
-  if(isVin) h += '<button class="toggle'+(d.pending?" on":"")+'" data-pending="1"><span><b>В процессе</b><small>не попадёт в итог, пока не завершится</small></span><span class="sw"><i></i></span></button>';
+  if(isVin || isChat) h += '<button class="toggle'+(d.pending?" on":"")+'" data-pending="1"><span><b>'+(isChat?"В ожидании":"В процессе")+'</b><small>'+(isChat?"деньги ещё не пришли, в итог не попадёт":"не попадёт в итог, пока не завершится")+'</small></span><span class="sw"><i></i></span></button>';
   h += '<div class="field"><label class="flab" for="dt">Дата</label><input class="txt" id="dt" type="date" value="'+esc(d.date)+'"></div>';
   h += '<div class="field"><label class="flab" for="nt">'+(isOther||cashOut||d.src==="Лично"?"Комментарий":"Заметка")+'</label>'
     + '<input class="txt" id="nt" placeholder="'+(cashOut?"например: кафе":isOther?"например: подработка":d.src==="Лично"?"например: дезодорант":"например: шарф")+'" value="'+esc(d.note)+'"></div>';
@@ -617,8 +629,10 @@ function editSheet(){
     + '</div>';
   h += '<div class="field"><label class="flab" for="dt">Дата</label><input class="txt" id="dt" type="date" value="'+esc(r.date)+'"></div>';
   h += '<div class="field"><label class="flab" for="nt">Заметка</label><input class="txt" id="nt" value="'+esc(r.note||"")+'"></div>';
-  if(r.kind==="vinted" && r.pending)
-    h += '<button class="wide" data-complete="1" style="color:var(--lime);border-color:#2C4420">Завершить продажу</button>';
+  if(r.kind==="vinted" || r.kind==="chat"){
+    var pon = d.pend;
+    h += '<button class="toggle'+(pon?" on":"")+'" data-togglepend="1"><span><b>'+(r.kind==="chat"?"В ожидании":"В процессе")+'</b><small>'+(pon?"не считается в итог месяца":"считается в итог месяца")+'</small></span><span class="sw"><i></i></span></button>';
+  }
   h += '<div class="btns"><button class="ghost danger" data-delete="1">Удалить</button><button class="primary" data-update="1">Сохранить</button></div>';
   return h;
 }
@@ -733,7 +747,7 @@ document.getElementById("fab").addEventListener("click", function(){
 });
 
 document.body.addEventListener("click", function(e){
-  var t = e.target.closest("[data-tab],[data-go],[data-cur],[data-rate],[data-m],[data-edit],[data-finish],[data-close],[data-scrim],[data-type],[data-src],[data-sub],[data-label],[data-from],[data-to],[data-cat],[data-cashin],[data-pending],[data-save],[data-update],[data-delete],[data-complete],[data-setsave],[data-export],[data-import],[data-clear],[data-repeat],[data-untpl]");
+  var t = e.target.closest("[data-tab],[data-go],[data-cur],[data-rate],[data-m],[data-edit],[data-finish],[data-close],[data-scrim],[data-type],[data-src],[data-sub],[data-label],[data-from],[data-to],[data-cat],[data-cashin],[data-pending],[data-save],[data-update],[data-delete],[data-complete],[data-setsave],[data-export],[data-import],[data-clear],[data-repeat],[data-untpl],[data-togglepend]");
   if(!t) return;
   var d = t.dataset, dr = ui.draft || {};
 
@@ -759,7 +773,7 @@ document.body.addEventListener("click", function(e){
   }
   if(d.edit!==undefined){
     var r = recs[d.edit]; if(!r) return;
-    ui.draft = { amount: String(r.kind==="chat"&&r.pct ? (r.sales||r.amount) : Math.abs(r.amount)).replace(".",",") };
+    ui.draft = { amount: String(r.kind==="chat"&&r.pct ? (r.sales||r.amount) : Math.abs(r.amount)).replace(".",","), pend: !!r.pending };
     ui.modal = { kind:"edit", id:d.edit }; renderModal(); return;
   }
 
@@ -784,6 +798,7 @@ document.body.addEventListener("click", function(e){
   if(d.cashin!==undefined){ dr.cashIn = d.cashin==="1"; renderModal(); return; }
   if(d.pending!==undefined){ dr.pending = !dr.pending; renderModal(); return; }
   if(d.repeat!==undefined){ dr.repeat = !dr.repeat; renderModal(); return; }
+  if(d.togglepend!==undefined){ dr.pend = !dr.pend; renderModal(); return; }
 
   if(d.save!==undefined){
     var v = parseFloat(String(document.getElementById("amt").value).replace(",",".")); if(!(v>0)) return;
@@ -794,8 +809,9 @@ document.body.addEventListener("click", function(e){
       var p = PLATFORMS.filter(function(x){ return x[0]===dr.label; })[0] || PLATFORMS[0];
       var own = p[2] ? v*p[2]/100 : v;
       rec = { id:id, kind:"chat", cur:"usd", amount:own, sales:p[2]?v:null, pct:p[2]||null, agency:p[1],
-        label:p[0], sub:(p[1]?p[1]:"")+(p[2]?" · "+p[2]+"%":" · своя сумма"), date:date, note:note, at:Date.now() };
-      delta = own;
+        label:p[0], sub:(p[1]?p[1]:"")+(p[2]?" · "+p[2]+"%":" · своя сумма"), date:date, note:note,
+        pending:!!dr.pending, at:Date.now() };
+      delta = dr.pending ? 0 : own;
     } else if(dr.type==="income" && dr.src==="Vinted"){
       rec = { id:id, kind:"vinted", cur:"pln", amount:v, label:"Продажа", sub:dr.label, pending:!!dr.pending, date:date, note:note, at:Date.now() };
       delta = dr.pending ? 0 : v/settings.rate;
@@ -835,6 +851,7 @@ document.body.addEventListener("click", function(e){
     else c.amount = v2;
     c.date = document.getElementById("dt").value || c.date;
     c.note = document.getElementById("nt").value || "";
+    if(c.kind==="vinted" || c.kind==="chat") c.pending = !!ui.draft.pend;
     ui.modal=null; ui.month=ym(c.date); shownTotal=null; putRec(c.id, c); return;
   }
   if(d.complete!==undefined){
