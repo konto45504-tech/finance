@@ -225,7 +225,7 @@ background:var(--ink-2);border:1px solid var(--line);border-radius:12px;padding:
 (function(){
 "use strict";
 
-var APP_VERSION = "14 ноября, 14:10";
+var APP_VERSION = "14 ноября, 14:30";
 var TABS = ["Обзор","Чаттинг","Vinted","Расходы","Наличные"];
 var MN = ["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];
 var MSHORT = ["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"];
@@ -280,7 +280,8 @@ function monthsAvailable(){
 function incomeOf(key){
   return sumUsd(inMonth(key,"chat").filter(function(r){ return !r.pending; }))
        + sumUsd(inMonth(key,"vinted").filter(function(r){ return !r.pending; }))
-       + sumUsd(inMonth(key,"other"));
+       + sumUsd(inMonth(key,"other"))
+       + sumUsd(inMonth(key,"cash").filter(function(r){ return r.amount>0; }));
 }
 /* расходы месяца: записи-расходы + траты наличных */
 function expenseOf(key){
@@ -429,7 +430,8 @@ function pageOverview(key){
   var vinDone = sumUsd(vin.filter(function(r){ return !r.pending; }));
   var vinPend = sumUsd(vin.filter(function(r){ return r.pending; }));
   var other = sumUsd(inMonth(key,"other"));
-  var total = chat+vinDone+other;
+  var cashIn = sumUsd(inMonth(key,"cash").filter(function(r){ return r.amount>0; }));
+  var total = chat+vinDone+other+cashIn;
   var exp = expenseOf(key);
   if(shownTotal===null) shownTotal = total;
   return '<div class="hero" id="hero">'
@@ -443,6 +445,7 @@ function pageOverview(key){
   + '<div class="list">'
   + '<button class="li" data-go="1"><span>Чаттинг<small>'+(chatPend?"в ожидании "+money(chatPend):"по агентствам")+'</small></span><b class="num">'+money(chat)+'</b></button>'
   + '<button class="li" data-go="2"><span>Vinted<small>'+(vinPend?"в процессе "+money(vinPend):"три аккаунта")+'</small></span><b class="num">'+money(vinDone)+'</b></button>'
+  + (cashIn ? '<button class="li" data-go="4"><span>Наличные<small>положено за месяц</small></span><b class="num">'+money(cashIn)+'</b></button>' : "")
   + '<button class="li" data-go="3"><span>Расходы<small>за месяц</small></span><b class="num">'+money(exp)+'</b></button>'
   + '<div class="li"><span>Итог месяца<small>доход минус расходы</small></span><b class="num" style="color:'+(total-exp>=0?"var(--lime)":"var(--bad)")+'">'+money(total-exp)+'</b></div>'
   + '</div>'
