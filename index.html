@@ -225,7 +225,7 @@ background:var(--ink-2);border:1px solid var(--line);border-radius:12px;padding:
 (function(){
 "use strict";
 
-var APP_VERSION = "14 ноября, 14:30";
+var APP_VERSION = "14 ноября, 14:45";
 var TABS = ["Обзор","Чаттинг","Vinted","Расходы","Наличные"];
 var MN = ["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];
 var MSHORT = ["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"];
@@ -233,6 +233,7 @@ var MNOM = ["Январь","Февраль","Март","Апрель","Май","
 var PLATFORMS = [["MV","LOCO",25],["OnlyFans","OF",25],["Другое",null,0]];
 var ACCOUNTS = ["Аккаунт 1","Аккаунт 2","Аккаунт 3"];
 var CATS = ["Подписки","Vinted","Техника","Лично","Разное"];
+var DEAD = { "NO NAME": "2026-11-01" };
 var VSUB = ["Закупка","Перегон","Прокси","ADS Power","Другое"];
 
 var DB = null, recs = {}, LS = "fin_v1";
@@ -255,6 +256,7 @@ function nf(n){
   s[0] = s[0].replace(/\B(?=(\d{3})+(?!\d))/g," ");
   return (n<0?"−":"")+s.join(",");
 }
+function isDead(r){ return !!(r.agency && DEAD[r.agency] && String(r.date) >= DEAD[r.agency]); }
 function usdOf(r){ return r.cur==="usd" ? r.amount : r.amount/settings.rate; }
 function money(usd){ return ui.cur==="usd" ? (usd<0?"−":"")+"$"+Math.abs(usd).toFixed(2) : nf(usd*settings.rate)+" zł"; }
 function moneyPln(p){ return ui.cur==="usd" ? (p<0?"−":"")+"$"+Math.abs(p/settings.rate).toFixed(2) : nf(p)+" zł"; }
@@ -278,7 +280,7 @@ function monthsAvailable(){
 }
 /* доход месяца: чаттинг + vinted завершённые + другое + списания наличных не считаем */
 function incomeOf(key){
-  return sumUsd(inMonth(key,"chat").filter(function(r){ return !r.pending; }))
+  return sumUsd(inMonth(key,"chat").filter(function(r){ return !r.pending && !isDead(r); }))
        + sumUsd(inMonth(key,"vinted").filter(function(r){ return !r.pending; }))
        + sumUsd(inMonth(key,"other"))
        + sumUsd(inMonth(key,"cash").filter(function(r){ return r.amount>0; }));
@@ -424,8 +426,8 @@ function monthsBlock(key){
 
 function pageOverview(key){
   var chatAll = inMonth(key,"chat");
-  var chat = sumUsd(chatAll.filter(function(r){ return !r.pending; }));
-  var chatPend = sumUsd(chatAll.filter(function(r){ return r.pending; }));
+  var chat = sumUsd(chatAll.filter(function(r){ return !r.pending && !isDead(r); }));
+  var chatPend = sumUsd(chatAll.filter(function(r){ return r.pending && !isDead(r); }));
   var vin = inMonth(key,"vinted");
   var vinDone = sumUsd(vin.filter(function(r){ return !r.pending; }));
   var vinPend = sumUsd(vin.filter(function(r){ return r.pending; }));
@@ -461,8 +463,9 @@ function rowHTML(r){
 
 function pageChat(key){
   var allc = inMonth(key,"chat");
-  var pend = allc.filter(function(r){ return r.pending; });
-  var arr = allc.filter(function(r){ return !r.pending; });
+  var dead = allc.filter(isDead);
+  var pend = allc.filter(function(r){ return r.pending && !isDead(r); });
+  var arr = allc.filter(function(r){ return !r.pending && !isDead(r); });
   var tot = sumUsd(arr);
   var pendSum = sumUsd(pend);
   var goal = settings.goalChat || 1000;
@@ -490,7 +493,11 @@ function pageChat(key){
   + (order.length ? '<div class="sec">ПО АГЕНТСТВАМ</div><div class="list">'+order.map(function(a){
       return '<div class="li"><span>'+esc(a)+'</span><b class="num">'+money(byAg[a])+'</b></div>'; }).join("")+'</div>' : "")
   + (arr.length ? '<div class="sec">ИСТОРИЯ · нажмите, чтобы изменить</div><div class="list">'+arr.map(rowHTML).join("")+'</div>'
-                : '<div class="empty">За этот месяц записей нет</div>');
+                : (pend.length?"":'<div class="empty">За этот месяц записей нет</div>'))
+  + (dead.length ? '<div class="sec">НЕ ВЫПЛАЧЕНО · '+money(sumUsd(dead))+'</div><div class="list" style="opacity:.55">'
+      + dead.map(function(r){
+          return '<button class="li" data-edit="'+r.id+'"><span>'+esc(r.label)+'<small>'+esc(r.sub||"")+' · агентство закрылось · '+dayOf(r.date)+" "+genOf(ym(r.date))+'</small></span><b class="num">'+moneyRec(r)+'</b></button>';
+        }).join("")+'</div><span class="hint" style="padding:0 4px">Эти деньги не придут, поэтому в итог месяца они не входят.</span>' : "");
 }
 
 function pageVinted(key){
