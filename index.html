@@ -241,7 +241,7 @@ background:var(--ink-2);border:1px solid var(--line);border-radius:12px;padding:
 (function(){
 "use strict";
 
-var APP_VERSION = "16 ноября, 13:10";
+var APP_VERSION = "16 ноября, 13:30";
 var TABS = ["Обзор","Чаттинг","Vinted","Расходы","Наличные"];
 var MN = ["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];
 var MSHORT = ["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"];
@@ -984,10 +984,25 @@ document.body.addEventListener("input", function(e){
 });
 addEventListener("resize", function(){ sizeFx(); });
 
+/* ---------- проверка свежей версии ---------- */
+function checkVersion(){
+  try{
+    fetch("version.json?t="+Date.now(), { cache:"no-store" }).then(function(res){
+      return res.ok ? res.json() : null;
+    }).then(function(data){
+      if(!data || !data.v || data.v === APP_VERSION) return;
+      var once = "fin_reload_" + data.v;
+      try{ if(sessionStorage.getItem(once)) return; sessionStorage.setItem(once, "1"); }catch(e){}
+      location.replace(location.pathname + "?v=" + encodeURIComponent(data.v));
+    }).catch(function(){});
+  }catch(e){}
+}
+
 /* ---------- старт ---------- */
 loadLocal();
 applyTemplates();
 render();
+checkVersion();
 
 var hasClaude = false;
 try{ hasClaude = (typeof claude!=="undefined") && !!claude && typeof claude.use==="function"; }catch(e){ hasClaude=false; }
