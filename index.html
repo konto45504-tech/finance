@@ -99,6 +99,22 @@ font-size:21px;color:var(--lime);opacity:0;transform:translateY(24px);text-shado
 .mlab{display:flex;gap:10px;margin-top:7px}
 .mlab i{flex:0 1 52px;max-width:52px;text-align:center;font-style:normal;font-size:11px;color:var(--mute);letter-spacing:.08em}
 .mlab i.on{color:var(--lime)}
+.per{border:1px solid var(--line);border-radius:22px;background:var(--ink-2);padding:18px;display:flex;flex-direction:column;gap:13px}
+.perchips{display:flex;gap:6px}
+.perchips button{flex:1;height:34px;border-radius:17px;border:1px solid var(--line-2);background:var(--ink);
+color:var(--mute);font-size:12.5px;font-weight:600}
+.perchips button.on{background:var(--lime);color:#0A1402;border-color:var(--lime)}
+.perhead{display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-family:var(--grotesk)}
+.perhead b{font-size:24px;font-weight:700;letter-spacing:-.02em}
+.perhead span{font-size:12.5px;color:var(--mute)}
+.pbars{display:flex;gap:4px;align-items:flex-end;height:78px}
+.pbars button{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:flex-end;height:100%}
+.pbars i{display:block;border-radius:4px 4px 0 0;background:linear-gradient(var(--lime-deep),rgba(127,180,0,.16));transition:height .3s}
+.pbars button.on i{background:linear-gradient(var(--lime),rgba(198,255,61,.24));box-shadow:0 0 14px rgba(198,255,61,.35)}
+.pbars button.zero i{background:#1A2125}
+.plab{display:flex;gap:4px}
+.plab i{flex:1;min-width:0;text-align:center;font-style:normal;font-size:10px;color:#5E686E;overflow:hidden}
+.plab i.on{color:var(--lime)}
 
 /* списки */
 .list{border:1px solid var(--line);border-radius:22px;background:var(--ink-2);overflow:hidden}
@@ -225,7 +241,7 @@ background:var(--ink-2);border:1px solid var(--line);border-radius:12px;padding:
 (function(){
 "use strict";
 
-var APP_VERSION = "14 ноября, 14:45";
+var APP_VERSION = "16 ноября, 13:10";
 var TABS = ["Обзор","Чаттинг","Vinted","Расходы","Наличные"];
 var MN = ["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];
 var MSHORT = ["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"];
@@ -238,7 +254,7 @@ var VSUB = ["Закупка","Перегон","Прокси","ADS Power","Дру
 
 var DB = null, recs = {}, LS = "fin_v1";
 var settings = { rate:3.93, goalChat:1000, goalVinted:3000, tpls:[] };
-var ui = { page:0, cur:"usd", month:null, mpick:null, modal:null, draft:null, justDone:null };
+var ui = { page:0, cur:"usd", month:null, mpick:null, period:"7", pday:null, modal:null, draft:null, justDone:null };
 
 function pad(n){ return n<10 ? "0"+n : ""+n; }
 function todayISO(){ var d=new Date(); return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
@@ -255,6 +271,13 @@ function nf(n){
   var s = Math.abs(n).toFixed(2).replace(".",",").split(",");
   s[0] = s[0].replace(/\B(?=(\d{3})+(?!\d))/g," ");
   return (n<0?"−":"")+s.join(",");
+}
+function daysInKey(key){ var a=key.split("-"); return new Date(+a[0], +a[1], 0).getDate(); }
+function addDays(iso, n){
+  var a = iso.split("-");
+  var d = new Date(Date.UTC(+a[0], +a[1]-1, +a[2]));
+  d.setUTCDate(d.getUTCDate()+n);
+  return d.getUTCFullYear()+"-"+pad(d.getUTCMonth()+1)+"-"+pad(d.getUTCDate());
 }
 function isDead(r){ return !!(r.agency && DEAD[r.agency] && String(r.date) >= DEAD[r.agency]); }
 function usdOf(r){ return r.cur==="usd" ? r.amount : r.amount/settings.rate; }
@@ -461,6 +484,48 @@ function rowHTML(r){
   + '<b class="num">'+sign+moneyRec(r)+'</b></button>';
 }
 
+function periodBlock(key){
+  var P = [["1","День"],["2","2 дня"],["7","Неделя"],["month","Месяц"]];
+  var from, to, label;
+  if(ui.period==="month"){
+    from = key+"-01"; to = key+"-"+pad(daysInKey(key)); label = "за "+monthName(key).split(" ")[0].toLowerCase();
+  } else {
+    var n = parseInt(ui.period,10) || 7;
+    to = todayISO(); from = addDays(to, -(n-1));
+    label = n===1 ? "за сегодня" : n===2 ? "за два дня" : "за неделю";
+  }
+  var days = [], d = from, guard = 0;
+  while(guard++ < 40){ days.push(d); if(d===to) break; d = addDays(d,1); }
+
+  var byDay = {};
+  list().forEach(function(r){
+    if(r.kind!=="chat" || r.pending || isDead(r)) return;
+    if(r.date < from || r.date > to) return;
+    byDay[r.date] = (byDay[r.date]||0) + usdOf(r);
+  });
+  var total = days.reduce(function(s2,x){ return s2 + (byDay[x]||0); }, 0);
+  var top = Math.max.apply(null, days.map(function(x){ return byDay[x]||0; }).concat([0.01]));
+  var sel = ui.pday && days.indexOf(ui.pday)>=0 ? ui.pday : null;
+  var wide = days.length <= 10;
+
+  return '<div class="per">'
+  + '<div class="perchips">'+P.map(function(x){
+      return '<button class="'+(ui.period===x[0]?"on":"")+'" data-per="'+x[0]+'">'+x[1]+'</button>'; }).join("")+'</div>'
+  + '<div class="perhead"><b class="num">'+money(sel ? (byDay[sel]||0) : total)+'</b>'
+  + '<span>'+(sel ? dayOf(sel)+" "+genOf(ym(sel)) : label)+'</span></div>'
+  + '<div class="pbars">'+days.map(function(x){
+      var v = byDay[x]||0;
+      var h = v>0 ? Math.max(6, Math.round(v/top*74)) : 3;
+      return '<button class="'+(x===sel?"on":"")+(v>0?"":" zero")+'" data-pday="'+x+'" aria-label="'+dayOf(x)+" "+genOf(ym(x))+'"><i style="height:'+h+'px"></i></button>';
+    }).join("")+'</div>'
+  + '<div class="plab">'+days.map(function(x){
+      var t = wide ? String(dayOf(x)) : (dayOf(x)%5===0||dayOf(x)===1 ? String(dayOf(x)) : "");
+      return '<i class="'+(x===sel?"on":"")+'">'+t+'</i>';
+    }).join("")+'</div>'
+  + '<span class="hint">Нажмите на столбик — покажет сумму за тот день.</span>'
+  + '</div>';
+}
+
 function pageChat(key){
   var allc = inMonth(key,"chat");
   var dead = allc.filter(isDead);
@@ -487,6 +552,7 @@ function pageChat(key){
           + '<span class="pv num">'+moneyRec(r)+'</span>'
           + '<button class="ok'+(on?" on":"")+'" data-finish="'+r.id+'" aria-label="Деньги пришли"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg></button></div>';
         }).join("")+'</div>' : "")
+  + periodBlock(key)
   + '<div class="goal"><div class="gt"><span>Цель месяца — '+money(goal)+'</span><b>'+pct+'%</b></div>'
   + '<div class="gbar"><i style="width:'+Math.min(pct,100)+'%"></i></div>'
   + '<div class="gt"><span>'+(tot>=goal ? "Цель взята" : "Осталось "+money(goal-tot))+'</span><span>'+arr.length+' записей</span></div></div>'
@@ -757,7 +823,7 @@ document.getElementById("fab").addEventListener("click", function(){
 });
 
 document.body.addEventListener("click", function(e){
-  var t = e.target.closest("[data-tab],[data-go],[data-cur],[data-rate],[data-m],[data-edit],[data-finish],[data-close],[data-scrim],[data-type],[data-src],[data-sub],[data-label],[data-from],[data-to],[data-cat],[data-cashin],[data-pending],[data-save],[data-update],[data-delete],[data-complete],[data-setsave],[data-export],[data-import],[data-clear],[data-repeat],[data-untpl],[data-togglepend]");
+  var t = e.target.closest("[data-tab],[data-go],[data-cur],[data-rate],[data-m],[data-per],[data-pday],[data-edit],[data-finish],[data-close],[data-scrim],[data-type],[data-src],[data-sub],[data-label],[data-from],[data-to],[data-cat],[data-cashin],[data-pending],[data-save],[data-update],[data-delete],[data-complete],[data-setsave],[data-export],[data-import],[data-clear],[data-repeat],[data-untpl],[data-togglepend]");
   if(!t) return;
   var d = t.dataset, dr = ui.draft || {};
 
@@ -767,6 +833,8 @@ document.body.addEventListener("click", function(e){
   if(d.go!==undefined){ goPage(+d.go); return; }
   if(d.cur!==undefined){ ui.cur=d.cur; shownTotal=null; render(); return; }
   if(d.m!==undefined){ ui.mpick=d.m; render(); return; }
+  if(d.per!==undefined){ ui.period=d.per; ui.pday=null; render(); return; }
+  if(d.pday!==undefined){ ui.pday = (ui.pday===d.pday ? null : d.pday); render(); return; }
   if(d.rate!==undefined){ ui.draft={}; ui.modal={kind:"gear"}; renderModal(); return; }
 
   if(d.finish!==undefined){
