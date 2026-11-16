@@ -136,6 +136,17 @@ border-top:1px solid var(--line);font-family:var(--grotesk);text-align:left;colo
 .goal .gt{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-family:var(--grotesk);font-size:13px;color:var(--mute)}
 .goal .gt b{color:var(--lime);font-size:16px}
 .gbar{height:11px;border-radius:6px;background:#172118;overflow:hidden}
+.dl{position:relative;border:1px solid #23381F;border-radius:24px;overflow:hidden;padding:20px;
+background:linear-gradient(150deg,#132C15,#0B1013);display:flex;flex-direction:column;gap:14px}
+.dl::after{content:"";position:absolute;right:-20%;top:-70%;width:80%;aspect-ratio:1;pointer-events:none;
+background:radial-gradient(circle,rgba(198,255,61,.18),transparent 62%)}
+.dlrow{position:relative;display:flex;align-items:flex-end;justify-content:space-between;gap:14px}
+.dlnum{font-family:var(--display);font-weight:900;font-size:clamp(40px,12vw,52px);line-height:.95;color:var(--lime);
+text-shadow:0 0 26px rgba(198,255,61,.4)}
+.dlside{text-align:right;font-family:var(--grotesk);font-size:12.5px;color:var(--mute);line-height:1.5}
+.dlside b{display:block;font-size:17px;font-weight:600;color:var(--text)}
+.dl .gt{position:relative;display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-family:var(--grotesk);font-size:13px;color:var(--mute)}
+.dl .gt span:last-child{color:var(--text)}
 .gbar i{display:block;height:11px;border-radius:6px;background:linear-gradient(90deg,var(--lime-deep),var(--lime));box-shadow:0 0 16px rgba(198,255,61,.4);transition:width .5s}
 
 /* в процессе */
@@ -246,7 +257,7 @@ background:var(--ink-2);border:1px solid var(--line);border-radius:12px;padding:
 (function(){
 "use strict";
 
-var APP_VERSION = "16 ноября, 21:50";
+var APP_VERSION = "17 ноября, 21:20";
 var TABS = ["Обзор","Чаттинг","Vinted","Расходы","Наличные"];
 var MN = ["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];
 var MSHORT = ["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"];
@@ -258,7 +269,7 @@ var DEAD = { "NO NAME": "2026-11-01" };
 var VSUB = ["Закупка","Перегон","Прокси","ADS Power","Другое"];
 
 var DB = null, recs = {}, LS = "fin_v1";
-var settings = { rate:3.93, goalChat:1000, goalVinted:3000, tpls:[] };
+var settings = { rate:3.93, goalChat:1000, goalVinted:3000, goalDate:"2027-02-01", tpls:[] };
 var ui = { page:0, cur:"usd", month:null, mpick:null, period:"7", pday:null, modal:null, draft:null, justDone:null };
 
 function pad(n){ return n<10 ? "0"+n : ""+n; }
@@ -276,6 +287,20 @@ function nf(n){
   var s = Math.abs(n).toFixed(2).replace(".",",").split(",");
   s[0] = s[0].replace(/\B(?=(\d{3})+(?!\d))/g," ");
   return (n<0?"−":"")+s.join(",");
+}
+function daysLeft(iso){
+  var a = String(iso).split("-");
+  var t = new Date(Date.UTC(+a[0], +a[1]-1, +a[2]));
+  var n = todayISO().split("-");
+  var now = new Date(Date.UTC(+n[0], +n[1]-1, +n[2]));
+  return Math.round((t-now)/86400000);
+}
+function plural(n, one, few, many){
+  var a = Math.abs(n)%100, b = a%10;
+  if(a>10 && a<20) return many;
+  if(b>1 && b<5) return few;
+  if(b===1) return one;
+  return many;
 }
 function daysInKey(key){ var a=key.split("-"); return new Date(+a[0], +a[1], 0).getDate(); }
 function addDays(iso, n){
@@ -452,6 +477,22 @@ function monthsBlock(key){
   + '</div>';
 }
 
+function goalCard(key){
+  var goal = settings.goalChat || 1000;
+  var now = sumUsd(inMonth(key,"chat").filter(function(r){ return !r.pending && !isDead(r); }));
+  var pct = Math.round(now/goal*100);
+  var d = daysLeft(settings.goalDate || "2027-02-01");
+  var dd = settings.goalDate ? settings.goalDate.split("-") : ["2027","02","01"];
+  var when = parseInt(dd[2],10)+" "+MN[parseInt(dd[1],10)-1];
+  return '<div class="dl">'
+  + '<span class="cap">ЦЕЛЬ · '+(goal%1?money(goal):"$"+goal)+' В МЕСЯЦ С ЧАТТИНГА</span>'
+  + '<div class="dlrow"><span class="dlnum num">'+(d>0?d:0)+'</span>'
+  + '<span class="dlside">'+(d>0 ? plural(d,"день","дня","дней")+" до "+when : "срок вышел")+'<b>'+pct+'%</b></span></div>'
+  + '<div class="gbar"><i style="width:'+Math.min(pct,100)+'%"></i></div>'
+  + '<div class="gt"><span>Сейчас '+money(now)+'</span><span>'+(now>=goal?"цель взята":"осталось "+money(goal-now))+'</span></div>'
+  + '</div>';
+}
+
 function pageOverview(key){
   var chatAll = inMonth(key,"chat");
   var chat = sumUsd(chatAll.filter(function(r){ return !r.pending && !isDead(r); }));
@@ -472,6 +513,7 @@ function pageOverview(key){
   + '<button class="rate" data-rate="1">Курс: 1 USD = <u>'+nf(settings.rate).replace(",00","")+'</u> PLN</button>'
   + monthsBlock(key)
   + '</div>'
+  + goalCard(key)
   + '<div class="list">'
   + '<button class="li" data-go="1"><span>Чаттинг<small>'+(chatPend?"в ожидании "+money(chatPend):"по агентствам")+'</small></span><b class="num">'+money(chat)+'</b></button>'
   + '<button class="li" data-go="2"><span>Vinted<small>'+(vinPend?"в процессе "+money(vinPend):"три аккаунта")+'</small></span><b class="num">'+money(vinDone)+'</b></button>'
@@ -739,6 +781,7 @@ function gearSheet(){
   + '<div class="amount"><input id="amt" inputmode="decimal" value="'+esc(d.rate!=null?d.rate:String(settings.rate).replace(".",","))+'"><span>zł</span></div></div>'
   + '<div class="field"><label class="flab" for="g1">Цель по чаттингу, $ в месяц</label><input class="txt" id="g1" inputmode="decimal" value="'+settings.goalChat+'"></div>'
   + '<div class="field"><label class="flab" for="g2">Цель по Vinted, zł в месяц</label><input class="txt" id="g2" inputmode="decimal" value="'+settings.goalVinted+'"></div>'
+  + '<div class="field"><label class="flab" for="g3">Дата, к которой выходим на цель</label><input class="txt" id="g3" type="date" value="'+(settings.goalDate||"2027-02-01")+'"></div>'
   + '<div class="btns"><button class="primary" data-setsave="1">Сохранить</button></div>'
   + ((settings.tpls && settings.tpls.length) ? '<div class="field"><span class="flab">Повторяющиеся расходы</span><div class="list">'
       + settings.tpls.map(function(t){
@@ -965,6 +1008,8 @@ document.body.addEventListener("click", function(e){
     var g1 = parseFloat(document.getElementById("g1").value), g2 = parseFloat(document.getElementById("g2").value);
     if(g1>0) settings.goalChat = g1;
     if(g2>0) settings.goalVinted = g2;
+    var g3 = document.getElementById("g3");
+    if(g3 && /^\d{4}-\d{2}-\d{2}$/.test(g3.value)) settings.goalDate = g3.value;
     putSettings(); ui.modal=null; shownTotal=null; render(); flash("настройки сохранены"); return;
   }
   if(d.untpl!==undefined){
