@@ -147,7 +147,9 @@ text-shadow:0 0 26px rgba(198,255,61,.4)}
 .dlside b{display:block;font-size:17px;font-weight:600;color:var(--text)}
 .li.solo{border:1px solid var(--line);border-radius:22px;background:var(--ink-2)}
 .pair{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.pair label{display:flex;flex-direction:column;gap:7px}
+.pair{min-width:0}
+.pair label{display:flex;flex-direction:column;gap:7px;min-width:0}
+.pair .txt{width:100%;min-width:0;box-sizing:border-box}
 .pair i{font-style:normal;font-family:var(--grotesk);font-size:11.5px;color:var(--mute)}
 .strip{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .stat{border:1px solid var(--line);border-radius:18px;padding:14px 16px;background:var(--ink-2)}
@@ -280,7 +282,7 @@ background:var(--ink-2);border:1px solid var(--line);border-radius:12px;padding:
 (function(){
 "use strict";
 
-var APP_VERSION = "18 ноября, 11:30";
+var APP_VERSION = "18 ноября, 14:10";
 var TABS = ["Обзор","Конверты","Чаттинг","Vinted","Расходы","Наличные"];
 var MN = ["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];
 var MSHORT = ["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"];
@@ -291,7 +293,7 @@ var CATS = ["Подписки","Vinted","Техника","Лично","Разн�
 var DEAD = { "NO NAME": "2026-11-01" };
 var VSUB = ["Закупка","Перегон","Прокси","ADS Power","Другое"];
 
-var DB = null, recs = {}, LS = "fin_v1";
+var DB = null, recs = {}, dels = {}, settingsMt = 0, LS = "fin_v1";
 var settings = { rate:3.93, goalChat:1000, goalVinted:3000, goalDate:"2027-02-01",
                  wallet:0, card:0, envBase:100, envThr:500, envPct:20, envWish:10, tpls:[] };
 var ui = { page:0, cur:"usd", month:null, mpick:null, period:"7", pday:null, modal:null, draft:null, justDone:null };
@@ -369,13 +371,15 @@ function expenseOf(key){
 }
 
 /* ---------- хранение ---------- */
-function saveLocal(){ try{ localStorage.setItem(LS, JSON.stringify({recs:recs, settings:settings})); }catch(e){} }
+function saveLocal(){ try{ localStorage.setItem(LS, JSON.stringify({recs:recs, settings:settings, dels:dels, smt:settingsMt})); }catch(e){} }
 function loadLocal(){
   try{
     var raw = localStorage.getItem(LS); if(!raw) return;
     var o = JSON.parse(raw);
     if(o && o.recs) recs = o.recs;
     if(o && o.settings){ for(var k in o.settings) if(o.settings[k]!=null) settings[k]=o.settings[k]; }
+    if(o && o.dels) dels = o.dels;
+    if(o && o.smt) settingsMt = o.smt;
   }catch(e){}
 }
 var tT;
@@ -386,16 +390,23 @@ function flash(t){
 }
 function newId(){ return "r"+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
 function putRec(id, rec){
-  recs[id] = rec; saveLocal(); render();
-  if(DB) DB.collection("records").doc(id).set(rec).then(function(){ flash("сохранено"); }, function(){ flash("не ушло в облако"); });
+  rec.mt = Date.now();
+  recs[id] = rec; delete dels[id]; saveLocal(); render();
+  if(DB) DB.collection("records").doc(id).set(rec).then(function(){},function(){});
+  if(sb.ref) sbPushRecs([id]).then(function(){ flash("сохранено в облако"); }, function(){ flash("сохранено, облако позже"); });
   else flash("сохранено");
 }
 function delRec(id){
-  delete recs[id]; saveLocal(); render();
+  dels[id] = Date.now(); delete recs[id]; saveLocal(); render();
   if(DB) DB.collection("records").doc(id).delete().then(function(){},function(){});
+  if(sb.ref) sbPushRecs([id]).then(function(){},function(){});
   flash("удалено");
 }
-function putSettings(){ saveLocal(); if(DB) DB.doc("settings/app").set(settings).then(function(){},function(){}); }
+function putSettings(){
+  settingsMt = Date.now(); saveLocal();
+  if(DB) DB.doc("settings/app").set(settings).then(function(){},function(){});
+  if(sb.ref) sbPushSettings().then(function(){},function(){});
+}
 
 /* ---------- повторяющиеся расходы ---------- */
 function applyTemplates(){
@@ -856,6 +867,24 @@ function editSheet(){
   return h;
 }
 
+function cloudBlock(){
+  if(!sb.ref){
+    return '<div class="field"><span class="flab">Облако</span>'
+    + '<input class="txt" id="sbe" type="email" autocomplete="username" inputmode="email" placeholder="email">'
+    + '<input class="txt" id="sbp" type="password" autocomplete="current-password" placeholder="пароль">'
+    + '<button class="wide" data-sbin="1">Войти в облако</button>'
+    + '<span class="hint">После входа записи хранятся в облаке: не пропадут, даже если удалить иконку, и видны на любом устройстве.</span></div>';
+  }
+  var when = sb.last
+    ? "обновлено в " + new Date(sb.last).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})
+    : "ещё не синхронизировано";
+  var st = sb.state==="sync" ? "синхронизация…" : sb.state==="err" ? "нет связи с облаком" : when;
+  return '<div class="field"><span class="flab">Облако</span>'
+  + '<div class="li solo"><span>'+esc(sb.email||"вход выполнен")+'<small>'+esc(st)+'</small></span>'
+  + '<b class="num" style="color:'+(sb.state==="err"?"var(--bad)":"var(--lime)")+'">'+(sb.state==="err"?"!":"✓")+'</b></div>'
+  + '<div class="btns"><button class="ghost" data-sbout="1">Выйти</button><button class="primary" data-sbsync="1">Синхронизировать</button></div></div>';
+}
+
 function gearSheet(){
   var d = ui.draft || {};
   return '<div class="hrow"><h2>Настройки</h2>'+closeBtn()+'</div>'
@@ -879,6 +908,7 @@ function gearSheet(){
           return '<div class="li"><span>'+esc(t.label)+'<small>'+(t.sub?esc(t.sub)+' · ':'')+nf(t.amount)+' zł · '+t.day+' числа</small></span>'
           + '<button class="x danger" data-untpl="'+esc(t.id)+'" aria-label="Убрать повтор"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></svg></button></div>';
         }).join("")+'</div><span class="hint">Крестик убирает только повтор, уже созданные записи остаются.</span></div>' : "")
+  + cloudBlock()
   + '<div class="field"><span class="flab">Данные</span>'
   + '<textarea id="io" class="txt" style="height:120px;padding:12px 16px;resize:none;line-height:1.4;font-size:12.5px;background:var(--ink);border:1px solid var(--line-2);border-radius:16px;color:var(--text)" placeholder="Вставьте сюда текст для импорта"></textarea></div>'
   + '<div class="btns"><button class="ghost" data-export="1">Выгрузить</button><button class="primary" data-import="1">Добавить записи</button></div>'
@@ -891,7 +921,7 @@ function importRecords(text){
   var arr;
   try{ arr = JSON.parse(text); }catch(e){ return "текст не читается"; }
   if(!arr || typeof arr.length!=="number") return "это не список записей";
-  var ok=0, bad=0;
+  var ok=0, bad=0, pushed=[];
   arr.forEach(function(o){
     if(!o || typeof o!=="object"){ bad++; return; }
     if(["chat","vinted","other","expense","cash"].indexOf(o.kind)<0){ bad++; return; }
@@ -905,10 +935,13 @@ function importRecords(text){
     if(o.kind==="vinted") rec.pending = !!o.pending;
     if(o.cat) rec.cat = String(o.cat);
     if(o.tpl) rec.tpl = String(o.tpl);
-    recs[id]=rec; ok++;
+    rec.mt = Date.now();
+    recs[id]=rec; delete dels[id]; ok++;
     if(DB) DB.collection("records").doc(id).set(rec).then(function(){},function(){});
+    pushed.push(id);
   });
   saveLocal(); render();
+  if(sb.ref && pushed.length) sbPushRecs(pushed).then(function(){},function(){});
   return "добавлено: "+ok+(bad?", пропущено: "+bad:"");
 }
 
@@ -977,7 +1010,7 @@ document.getElementById("fab").addEventListener("click", function(){
 });
 
 document.body.addEventListener("click", function(e){
-  var t = e.target.closest("[data-hands],[data-tab],[data-go],[data-cur],[data-rate],[data-m],[data-per],[data-pday],[data-edit],[data-finish],[data-close],[data-scrim],[data-type],[data-src],[data-sub],[data-label],[data-from],[data-to],[data-cat],[data-cashin],[data-pending],[data-save],[data-update],[data-delete],[data-complete],[data-setsave],[data-export],[data-import],[data-clear],[data-repeat],[data-untpl],[data-togglepend]");
+  var t = e.target.closest("[data-sbin],[data-sbout],[data-sbsync],[data-hands],[data-tab],[data-go],[data-cur],[data-rate],[data-m],[data-per],[data-pday],[data-edit],[data-finish],[data-close],[data-scrim],[data-type],[data-src],[data-sub],[data-label],[data-from],[data-to],[data-cat],[data-cashin],[data-pending],[data-save],[data-update],[data-delete],[data-complete],[data-setsave],[data-export],[data-import],[data-clear],[data-repeat],[data-untpl],[data-togglepend]");
   if(!t) return;
   var d = t.dataset, dr = ui.draft || {};
 
@@ -991,6 +1024,18 @@ document.body.addEventListener("click", function(e){
   if(d.pday!==undefined){ ui.pday = (ui.pday===d.pday ? null : d.pday); render(); return; }
   if(d.rate!==undefined){ ui.draft={}; ui.modal={kind:"gear"}; renderModal(); return; }
   if(d.hands!==undefined){ ui.draft={}; ui.modal={kind:"gear"}; renderModal(); return; }
+  if(d.sbin!==undefined){
+    var ei = document.getElementById("sbe"), pi = document.getElementById("sbp");
+    var em = ei ? ei.value.trim() : "", pw = pi ? pi.value : "";
+    if(!em || !pw){ flash("введите email и пароль"); return; }
+    t.disabled = true; t.textContent = "Входим…";
+    sbLogin(em, pw).then(function(){ renderModal(); return sbSync(); })
+      .then(function(){ flash("вход выполнен"); })
+      .catch(function(err){ sbOut(); renderModal(); flash("не вышло: "+((err&&err.message)||"")); });
+    return;
+  }
+  if(d.sbout!==undefined){ sbOut(); renderModal(); flash("вышли из облака"); return; }
+  if(d.sbsync!==undefined){ sbSync(); return; }
 
   if(d.finish!==undefined){
     var fid = d.finish;
@@ -1126,8 +1171,11 @@ document.body.addEventListener("click", function(e){
   }
   if(d.clear!==undefined){
     if(!ui.draft.confirmClear){ ui.draft.confirmClear = true; renderModal(); return; }
-    var ids = Object.keys(recs); recs = {}; saveLocal();
+    var ids = Object.keys(recs); recs = {};
+    ids.forEach(function(x){ dels[x] = Date.now(); });
+    saveLocal();
     if(DB) ids.forEach(function(x){ DB.collection("records").doc(x).delete().then(function(){},function(){}); });
+    if(sb.ref) sbPushRecs(ids).then(function(){},function(){});
     ui.modal=null; shownTotal=null; render(); flash("стёрто: "+ids.length); return;
   }
 });
@@ -1147,6 +1195,122 @@ document.body.addEventListener("input", function(e){
 });
 addEventListener("resize", function(){ sizeFx(); });
 
+/* ---------- облако (Supabase) ---------- */
+var SB_URL = "https://drchtaqfsnopokxaohsr.supabase.co";
+var SB_KEY = "sb_publishable_ib92EGjWVSl7wwXIjpcZJg_4STjfnpv";
+var SBS = "fin_sb";
+var sb = { tok:null, ref:null, exp:0, uid:null, email:null, state:"off", last:null, err:null };
+
+function sbSave(){
+  try{ localStorage.setItem(SBS, JSON.stringify({ tok:sb.tok, ref:sb.ref, exp:sb.exp, uid:sb.uid, email:sb.email, last:sb.last })); }catch(e){}
+}
+function sbLoad(){
+  try{
+    var o = JSON.parse(localStorage.getItem(SBS)||"null");
+    if(o && o.ref){ sb.tok=o.tok; sb.ref=o.ref; sb.exp=o.exp||0; sb.uid=o.uid; sb.email=o.email; sb.last=o.last||null; sb.state="idle"; }
+  }catch(e){}
+}
+function sbOut(){
+  sb.tok=null; sb.ref=null; sb.uid=null; sb.email=null; sb.exp=0; sb.state="off"; sb.last=null; sb.err=null;
+  try{ localStorage.removeItem(SBS); }catch(e){}
+}
+function sbToken(grant, data){
+  return fetch(SB_URL+"/auth/v1/token?grant_type="+grant, {
+    method:"POST", headers:{ "apikey":SB_KEY, "Content-Type":"application/json" }, body: JSON.stringify(data)
+  }).then(function(r){
+    return r.json().then(function(j){
+      if(!r.ok) throw new Error(j.error_description || j.msg || j.message || ("HTTP "+r.status));
+      return j;
+    });
+  }).then(function(j){
+    sb.tok = j.access_token; sb.ref = j.refresh_token;
+    sb.exp = Date.now() + ((j.expires_in||3600)*1000) - 60000;
+    if(j.user){ sb.uid = j.user.id; sb.email = j.user.email; }
+    sb.state = "idle"; sb.err = null; sbSave(); return j;
+  });
+}
+function sbLogin(email, pw){ return sbToken("password", { email:email, password:pw }); }
+function sbReady(){
+  if(!sb.ref) return Promise.reject(new Error("нет входа"));
+  if(sb.tok && Date.now() < sb.exp) return Promise.resolve();
+  return sbToken("refresh_token", { refresh_token: sb.ref });
+}
+function sbRest(path, opts){
+  opts = opts || {};
+  return sbReady().then(function(){
+    var h = { "apikey":SB_KEY, "Authorization":"Bearer "+sb.tok, "Content-Type":"application/json" };
+    if(opts.prefer) h["Prefer"] = opts.prefer;
+    return fetch(SB_URL+"/rest/v1/"+path, {
+      method: opts.method||"GET", headers:h, body: opts.body ? JSON.stringify(opts.body) : undefined
+    });
+  }).then(function(r){
+    if(!r.ok) return r.text().then(function(t){ throw new Error(t || ("HTTP "+r.status)); });
+    if(r.status===204) return null;
+    return r.json().catch(function(){ return null; });
+  });
+}
+function sbPushRecs(ids){
+  if(!sb.ref || !ids || !ids.length) return Promise.resolve();
+  var rows = ids.map(function(id){
+    var r = recs[id];
+    if(r){
+      if(!r.mt) r.mt = r.at || 1;
+      return { uid:sb.uid, id:id, data:r, deleted:false, mt:r.mt };
+    }
+    return { uid:sb.uid, id:id, data:{}, deleted:true, mt: dels[id] || Date.now() };
+  });
+  return sbRest("recs?on_conflict=uid,id", { method:"POST", body:rows, prefer:"resolution=merge-duplicates,return=minimal" });
+}
+function sbPushSettings(){
+  if(!sb.ref) return Promise.resolve();
+  if(!settingsMt) settingsMt = 1;
+  return sbRest("settings?on_conflict=uid", { method:"POST", body:[{ uid:sb.uid, data:settings, mt:settingsMt }], prefer:"resolution=merge-duplicates,return=minimal" });
+}
+function sbSync(quiet){
+  if(!sb.ref) return Promise.resolve();
+  sb.state = "sync"; renderModal();
+  return Promise.all([ sbRest("recs?select=id,data,deleted,mt"), sbRest("settings?select=data,mt") ])
+  .then(function(res){
+    var rows = res[0] || [], st = (res[1]||[])[0];
+    var push = [], seen = {}, changed = false;
+    rows.forEach(function(row){
+      seen[row.id] = 1;
+      var cm = row.mt || 0;
+      var lm = recs[row.id] ? (recs[row.id].mt || recs[row.id].at || 1) : (dels[row.id] != null ? dels[row.id] : -1);
+      if(cm > lm){
+        if(row.deleted){
+          if(recs[row.id]){ delete recs[row.id]; changed = true; }
+          dels[row.id] = cm;
+        } else {
+          var o = row.data || {}; o.id = row.id; o.mt = cm;
+          recs[row.id] = o; delete dels[row.id]; changed = true;
+        }
+      } else if(lm > cm){ push.push(row.id); }
+    });
+    Object.keys(recs).forEach(function(id){ if(!seen[id]) push.push(id); });
+    Object.keys(dels).forEach(function(id){ if(!seen[id]) push.push(id); });
+    var jobs = [];
+    if(push.length) jobs.push(sbPushRecs(push));
+    if(st){
+      if((st.mt||0) > settingsMt){
+        var sv = st.data || {};
+        for(var k in sv) if(sv[k]!=null) settings[k] = sv[k];
+        settingsMt = st.mt || 0; changed = true;
+      } else if(settingsMt > (st.mt||0)) jobs.push(sbPushSettings());
+    } else jobs.push(sbPushSettings());
+    return Promise.all(jobs).then(function(){
+      sb.last = Date.now(); sb.state = "idle"; sb.err = null; sbSave();
+      saveLocal();
+      if(changed) shownTotal = null;
+      render();
+      if(!quiet) flash("синхронизировано");
+    });
+  }).catch(function(e){
+    sb.state = "err"; sb.err = String((e && e.message) || e); render();
+    if(!quiet) flash("облако недоступно");
+  });
+}
+
 /* ---------- проверка свежей версии ---------- */
 function checkVersion(){
   try{
@@ -1163,9 +1327,12 @@ function checkVersion(){
 
 /* ---------- старт ---------- */
 loadLocal();
+sbLoad();
 applyTemplates();
 render();
 checkVersion();
+if(sb.ref) sbSync(true);
+addEventListener("visibilitychange", function(){ if(!document.hidden && sb.ref && sb.state!=="sync") sbSync(true); });
 
 var hasClaude = false;
 try{ hasClaude = (typeof claude!=="undefined") && !!claude && typeof claude.use==="function"; }catch(e){ hasClaude=false; }
