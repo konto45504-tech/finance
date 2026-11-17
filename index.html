@@ -282,7 +282,7 @@ background:var(--ink-2);border:1px solid var(--line);border-radius:12px;padding:
 (function(){
 "use strict";
 
-var APP_VERSION = "18 ноября, 14:45";
+var APP_VERSION = "18 ноября, 15:20";
 var TABS = ["Обзор","Конверты","Чаттинг","Vinted","Расходы","Наличные"];
 var MN = ["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];
 var MSHORT = ["янв","фев","мар","апр","май","июн","июл","авг","сен","окт","ноя","дек"];
@@ -295,7 +295,8 @@ var VSUB = ["Закупка","Перегон","Прокси","ADS Power","Дру
 
 var DB = null, recs = {}, dels = {}, settingsMt = 0, LS = "fin_v1";
 var settings = { rate:3.93, goalChat:1000, goalVinted:3000, goalDate:"2027-02-01",
-                 wallet:0, card:0, envBase:100, envThr:500, envPct:20, envWish:10, tpls:[] };
+                 wallet:0, card:0, envBase:100, envThr:500, envPct:20, envWish:10,
+                 feeTop:2.5, feeFx:0.5, feeAuth:0.25, tpls:[] };
 var ui = { page:0, cur:"usd", month:null, mpick:null, period:"7", pday:null, modal:null, draft:null, justDone:null };
 
 function pad(n){ return n<10 ? "0"+n : ""+n; }
@@ -750,6 +751,30 @@ function pageVinted(key){
                  : (pend.length?"":'<div class="empty">За этот месяц записей нет</div>'));
 }
 
+function pc(n){ return String(n).replace(".",","); }
+function topupCard(key){
+  var tpls = settings.tpls || [], base = 0, cnt = 0, src = "";
+  if(tpls.length){
+    tpls.forEach(function(t){ base += (t.cur==="usd" ? t.amount : t.amount/settings.rate); cnt++; });
+    src = "по повторяющимся расходам";
+  } else {
+    var subs = inMonth(key,"expense").filter(function(r){ return r.label==="Подписки"; });
+    base = sumUsd(subs); cnt = subs.length;
+    src = "по подпискам за " + monthName(key).split(" ")[0].toLowerCase();
+  }
+  if(base<=0) return "";
+  var fTop = settings.feeTop||0, fFx = settings.feeFx||0, fAuth = settings.feeAuth||0;
+  var afterFx = base * (1 + fFx/100) + fAuth*cnt;
+  var send = afterFx * (1 + fTop/100);
+  var fee = send - base;
+  return '<div class="dl">'
+  + '<span class="cap">ЗАКИНУТЬ НА КАРТУ</span>'
+  + '<div class="dlrow"><span class="dlnum num'+fitCls(money(send))+'">'+money(send)+'</span>'
+  + '<span class="dlside">'+esc(src)+'<b>'+money(base)+'</b></span></div>'
+  + '<div class="gt"><span>комиссии '+money(fee)+'</span><span>'+pc(fTop)+'% + '+pc(fFx)+'% + $'+fAuth.toFixed(2)+'×'+cnt+'</span></div>'
+  + '</div>';
+}
+
 function pageExpenses(key){
   var arr = inMonth(key,"expense");
   var cash = inMonth(key,"cash").filter(function(r){ return r.amount<0; });
@@ -764,6 +789,7 @@ function pageExpenses(key){
   + '<div class="sum pale num'+fitCls(money(sum))+'">'+money(sum)+'</div>'
   + '<div class="slot"><span class="sl">'+all.length+' покупок · '+cats.length+' категорий</span></div>'
   + '</div>'
+  + topupCard(key)
   + (cats.length ? '<div class="tiles">'+cats.map(function(c){
       var p = Math.round(byCat[c]/(sum||1)*100);
       return '<div class="tile"><em>'+esc(c)+'</em><b class="num">'+money(byCat[c])+'</b>'
@@ -904,6 +930,11 @@ function gearSheet(){
   + '<label><i>Хотелки, %</i><input class="txt" id="e4" inputmode="decimal" value="'+(settings.envWish||0)+'"></label></div>'
   + '<div class="pair"><label><i>Прибавка начинается с, $</i><input class="txt" id="e2" inputmode="decimal" value="'+(settings.envThr||0)+'"></label>'
   + '<label><i>Прибавка, %</i><input class="txt" id="e3" inputmode="decimal" value="'+(settings.envPct||0)+'"></label></div></div>'
+  + '<div class="field"><span class="flab">Комиссии карты</span>'
+  + '<div class="pair"><label><i>Пополнение, %</i><input class="txt" id="f1" inputmode="decimal" value="'+(settings.feeTop||0)+'"></label>'
+  + '<label><i>Обмен валют, %</i><input class="txt" id="f2" inputmode="decimal" value="'+(settings.feeFx||0)+'"></label></div>'
+  + '<div class="pair"><label><i>За платёж, $</i><input class="txt" id="f3" inputmode="decimal" value="'+(settings.feeAuth||0)+'"></label><span></span></div>'
+  + '<span class="hint">Из этого считается, сколько закинуть на карту — блок на вкладке «Расходы».</span></div>'
   + '<div class="btns"><button class="primary" data-setsave="1">Сохранить</button></div>'
   + ((settings.tpls && settings.tpls.length) ? '<div class="field"><span class="flab">Повторяющиеся расходы</span><div class="list">'
       + settings.tpls.map(function(t){
@@ -1152,7 +1183,7 @@ document.body.addEventListener("click", function(e){
     if(g2>0) settings.goalVinted = g2;
     var g3 = document.getElementById("g3");
     if(g3 && /^\d{4}-\d{2}-\d{2}$/.test(g3.value)) settings.goalDate = g3.value;
-    ["wallet:w1","card:w2","envBase:e1","envThr:e2","envPct:e3","envWish:e4"].forEach(function(pairStr){
+    ["wallet:w1","card:w2","envBase:e1","envThr:e2","envPct:e3","envWish:e4","feeTop:f1","feeFx:f2","feeAuth:f3"].forEach(function(pairStr){
       var kk = pairStr.split(":"), el = document.getElementById(kk[1]);
       if(!el) return;
       var vv = parseFloat(String(el.value).replace(",","."));
